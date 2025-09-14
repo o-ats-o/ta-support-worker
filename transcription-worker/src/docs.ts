@@ -1,0 +1,130 @@
+import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
+import { swaggerUI } from '@hono/swagger-ui';
+import { scenarioSchema } from './schemas/scenario';
+import { processRequestSchema, webhookQuerySchema, runpodOutputSchema } from './schemas/process';
+import { listQuerySchema } from './schemas/utterances';
+
+export const docsApp = new OpenAPIHono();
+
+docsApp.doc('/openapi.json', {
+  openapi: '3.1.0',
+  info: { title: 'Transcription Worker API', version: '1.0.0' },
+});
+
+// POST /generate-upload-url アップロードURLを生成する
+docsApp.openapi(
+  createRoute({
+    method: 'post',
+    path: '/generate-upload-url',
+    request: {
+      body: {
+        content: {
+          'application/json': {
+            schema: z.object({
+              contentType: z.enum(['audio/wav', 'audio/flac']).optional().openapi({
+                example: 'audio/wav',
+                description: 'アップロードするMIMEタイプ（未指定は audio/wav）',
+              }),
+            }).openapi('GenerateUploadUrlRequest'),
+          },
+        },
+      },
+    },
+    responses: {
+      200: {
+        description: 'Signed URL generated',
+        content: {
+          'application/json': {
+            schema: z.object({ uploadUrl: z.string().url(), objectKey: z.string() }).openapi('GenerateUploadUrlResponse'),
+          },
+        },
+      },
+    },
+  }),
+  (c) => c.json({ uploadUrl: '', objectKey: '' })
+);
+
+// POST /generate-scenario
+docsApp.openapi(
+  createRoute({
+    method: 'post',
+    path: '/generate-scenario',
+    request: {
+      body: {
+        content: {
+          'application/json': {
+            schema: scenarioSchema.openapi('GenerateScenarioRequest'),
+          },
+        },
+        required: true,
+      },
+    },
+    responses: {
+      200: {
+        description: 'Generated scenario',
+        content: {
+          'application/json': {
+            schema: z.object({ scenario: z.string() }).openapi('GenerateScenarioResponse'),
+          },
+        },
+      },
+    },
+  }),
+  // ダミーのハンドラ（実実装は既存ルート）。docs 目的のみ
+  (c) => c.json({ scenario: '' })
+);
+
+// POST /process-request 処理リクエストを送信する
+docsApp.openapi(
+  createRoute({
+    method: 'post',
+    path: '/process-request',
+    request: {
+      body: {
+        content: {
+          'application/json': {
+            schema: processRequestSchema.openapi('ProcessRequest'),
+          },
+        },
+        required: true,
+      },
+    },
+    responses: {
+      202: {
+        description: 'Accepted',
+        content: { 'application/json': { schema: z.object({ success: z.boolean(), message: z.string(), jobId: z.string().optional() }) } },
+      },
+    },
+  }),
+  (c) => c.json({ success: true, message: 'Accepted' }, 202)
+);
+
+// POST /session/process (webhook) RunPodのジョブが完了したときに呼ばれる
+docsApp.openapi(
+  createRoute({
+    method: 'post',
+    path: '/session/process',
+    request: {
+      query: webhookQuerySchema.openapi('WebhookQuery'),
+      body: { content: { 'application/json': { schema: runpodOutputSchema.openapi('RunpodWebhookBody') } }, required: true },
+    },
+    responses: { 200: { description: 'OK' } },
+  }),
+  (c) => c.json({})
+);
+
+// GET /utterances 発話を取得する
+docsApp.openapi(
+  createRoute({
+    method: 'get',
+    path: '/utterances',
+    request: { query: listQuerySchema.openapi('ListUtterancesQuery') },
+    responses: { 200: { description: 'OK' } },
+  }),
+  (c) => c.json({})
+);
+
+// UI Swagger UIを表示する
+docsApp.get('/docs', swaggerUI({ url: '/openapi.json' }));
+
+

@@ -1,0 +1,16 @@
+name = "transcription-worker"
+main = "src/index.ts"
+compatibility_date = "2024-04-05"
+
+# D1データベースへの接続設定
+[[d1_databases]]
+binding = "DB"
+database_name = "transcription-db" # フェーズ1.3でメモした名前
+database_id = "505aff08-02ff-44cd-8892-8a3f1fbbc7f1"   # フェーズ1.3でメモしたID
+
+# 公開しても問題ない環境変数
+[vars]
+R2_BUCKET_NAME = "transcription-audio-bucket" # フェーズ1.1で作成したバケット名
+R2_ACCOUNT_ID = "a836b4ba0bc9b228b0f527d6f442c155" # Cloudflareダッシュボード右上で確認
+ALLOWED_ORIGIN = "http://localhost:3000" # 開発用。本番ではフロントのURLに変更
+RUNPOD_ENDPOINT_ID = "s1qct4d0xol9s3"
