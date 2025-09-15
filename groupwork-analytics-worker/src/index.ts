@@ -9,6 +9,7 @@ import { getConfig, type AppBindings } from './config';
 import { docsApp } from './docs';
 
 const app = new Hono<{ Bindings: AppBindings }>();
+const api = new Hono<{ Bindings: AppBindings }>();
 
 // CORS
 app.use('*', async (c, next) => {
@@ -17,11 +18,22 @@ app.use('*', async (c, next) => {
   return corsMiddleware(c, next);
 });
 
+// 直下のルート
 app.route('/', uploadRoutes);
 app.route('/', processRoutes);
 app.route('/', webhookRoutes);
 app.route('/', utterancesRoutes);
 app.route('/', scenarioRoutes);
 app.route('/', docsApp);
+
+// /api 配下にも同じルート群をマウント
+api.route('/', uploadRoutes);
+api.route('/', processRoutes);
+api.route('/', webhookRoutes);
+api.route('/', utterancesRoutes);
+api.route('/', scenarioRoutes);
+api.route('/', docsApp);
+
+app.route('/api', api);
 
 export default app;
