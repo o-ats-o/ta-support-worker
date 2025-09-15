@@ -124,7 +124,7 @@ docsApp.openapi(
   (c) => c.json({})
 );
 
-// UI Swagger UIを表示する
-docsApp.get('/docs', swaggerUI({ url: '/openapi.json' }));
+// UI Swagger UIを表示する（相対参照にして /api 配下でも動作）
+docsApp.get('/docs', swaggerUI({ url: 'openapi.json' }));
 
 
