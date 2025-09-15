@@ -23,7 +23,7 @@ Cloudflare Workers 上で動作する音声アップロード・文字起こし�
 
 ```
 /Users/ats/ta-support-worker
-└── transcription-worker/
+└── groupwork-analytics-worker/
     ├── src/
     │   ├── index.ts            # エントリ（ルータ束ね）
     │   ├── docs.ts             # OpenAPI + Swagger UI (/docs, /openapi.json)
@@ -54,7 +54,7 @@ Cloudflare Workers 上で動作する音声アップロード・文字起こし�
 1. 依存関係のインストール
 
 ```bash
-cd /Users/ats/ta-support-worker/transcription-worker
+cd /Users/ats/ta-support-worker/groupwork-analytics-worker
 npm install
 ```
 
@@ -68,7 +68,7 @@ npx wrangler d1 execute transcription-db --local \
 3. ローカル環境変数（.dev.vars）
 
 ```dotenv
-# /Users/ats/ta-support-worker/transcription-worker/.dev.vars
+# /Users/ats/ta-support-worker/groupwork-analytics-worker/.dev.vars
 ALLOWED_ORIGIN="http://localhost:3000"
 RUNPOD_ENDPOINT_ID="<your_runpod_endpoint_id>"
 # 以下は必要に応じて追加
@@ -92,7 +92,7 @@ npx wrangler dev --config ./wrangler.toml
 1. シークレット登録（値は閲覧不可、必要なら上書き）
 
 ```bash
-cd /Users/ats/ta-support-worker/transcription-worker
+cd /Users/ats/ta-support-worker/groupwork-analytics-worker
 printf '<VALUE>' | npx wrangler secret put RUNPOD_API_KEY --config ./wrangler.toml
 printf '<VALUE>' | npx wrangler secret put R2_ACCESS_KEY_ID --config ./wrangler.toml
 printf '<VALUE>' | npx wrangler secret put R2_SECRET_ACCESS_KEY --config ./wrangler.toml

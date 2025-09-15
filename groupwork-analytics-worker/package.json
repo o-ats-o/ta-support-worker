@@ -1,5 +1,5 @@
 {
-	"name": "transcription-worker",
+	"name": "groupwork-analytics-worker",
 	"version": "0.0.0",
 	"private": true,
 	"scripts": {
