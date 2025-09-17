@@ -9,6 +9,8 @@ export const docsApp = new OpenAPIHono();
 docsApp.doc('/openapi.json', {
   openapi: '3.1.0',
   info: { title: 'Transcription Worker API', version: '1.0.0' },
+  // Try it out 時のベースURLを /api に固定
+  servers: [{ url: '/api' }],
 });
 
 // POST /generate-upload-url アップロードURLを生成する
