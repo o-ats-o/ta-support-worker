@@ -7,6 +7,7 @@ import { utterancesRoutes } from './routes/utterances';
 import { scenarioRoutes } from './routes/scenario';
 import { getConfig, type AppBindings } from './config';
 import { docsApp } from './docs';
+import { sessionsRoutes } from './routes/sessions';
 
 const app = new Hono<{ Bindings: AppBindings }>();
 const api = new Hono<{ Bindings: AppBindings }>();
@@ -25,6 +26,7 @@ api.route('/', webhookRoutes);
 api.route('/', utterancesRoutes);
 api.route('/', scenarioRoutes);
 api.route('/', docsApp);
+api.route('/', sessionsRoutes);
 
 app.route('/api', api);
 
