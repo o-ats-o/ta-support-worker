@@ -5,10 +5,11 @@ export async function startRunpodJob(params: {
   apiKey: string;
   objectKey: string;
   webhookUrl: string;
+  bucketName?: string;
 }): Promise<StartJobResponse> {
-  const { endpointId, apiKey, objectKey, webhookUrl } = params;
+  const { endpointId, apiKey, objectKey, webhookUrl, bucketName } = params;
   const runpodEndpoint = `https://api.runpod.ai/v2/${endpointId}/run`;
-  const runpodPayload = { input: { object_key: objectKey }, webhook: webhookUrl };
+  const runpodPayload = { input: { object_key: objectKey, bucket_name: bucketName }, webhook: webhookUrl };
   const response = await fetch(runpodEndpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },

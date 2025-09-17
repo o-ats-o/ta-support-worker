@@ -18,15 +18,7 @@ app.use('*', async (c, next) => {
   return corsMiddleware(c, next);
 });
 
-// 直下のルート
-app.route('/', uploadRoutes);
-app.route('/', processRoutes);
-app.route('/', webhookRoutes);
-app.route('/', utterancesRoutes);
-app.route('/', scenarioRoutes);
-app.route('/', docsApp);
-
-// /api 配下にも同じルート群をマウント
+// /api 配下にルート群をマウント
 api.route('/', uploadRoutes);
 api.route('/', processRoutes);
 api.route('/', webhookRoutes);

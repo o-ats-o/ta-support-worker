@@ -22,6 +22,7 @@ processRoutes.post('/process-request', zValidator('json', processRequestSchema),
       apiKey: c.env.RUNPOD_API_KEY,
       objectKey,
       webhookUrl: webhookUrl.toString(),
+      bucketName: c.env.R2_BUCKET_NAME,
     });
     return c.json({ success: true, message: 'Processing job accepted.', jobId: job.id }, 202);
   } catch (e: any) {
