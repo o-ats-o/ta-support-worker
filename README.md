@@ -84,7 +84,7 @@ RUNPOD_ENDPOINT_ID="<your_runpod_endpoint_id>"
 
 ```bash
 npx wrangler dev --config ./wrangler.toml
-# http://localhost:8787/docs （Swagger UI）
+# http://localhost:8787/api/docs （Swagger UI）
 ```
 
 ## デプロイ（本番）
@@ -119,7 +119,7 @@ npx wrangler deploy --config ./wrangler.toml
 
 1. 署名付き URL の取得
 
-- POST `/generate-upload-url`
+- POST `/api/generate-upload-url`
 - リクエスト（任意）: `{ "contentType": "audio/wav" | "audio/flac" }`
 - レスポンス: `{ uploadUrl, objectKey }`
 
@@ -136,13 +136,13 @@ curl -X PUT "<uploadUrl>" -H "Content-Type: audio/flac" --data-binary @/path/to/
 
 3. RunPod に文字起こし依頼
 
-- POST `/process-request`
+- POST `/api/process-request`
 - リクエスト: `{ "objectKey":"<上記のobjectKey>", "sessionId":"s1", "groupId":"g1" }`
 - 期待: 202 Accepted（`jobId` 返却）
 
 4. Webhook（RunPod→Worker）受信の確認（手動テスト）
 
-- POST `/session/process?sessionId=s1&groupId=g1&secret=<WEBHOOK_SECRET>`
+- POST `/api/session/process?sessionId=s1&groupId=g1&secret=<WEBHOOK_SECRET>`
 - ボディ例:
 
 ```json
@@ -153,11 +153,11 @@ curl -X PUT "<uploadUrl>" -H "Content-Type: audio/flac" --data-binary @/path/to/
 
 5. 保存データの取得
 
-- GET `/utterances?group_id=g1&limit=50&offset=0`
+- GET `/api/utterances?group_id=g1&limit=50&offset=0`
 
 6. シナリオ生成
 
-- POST `/generate-scenario`
+- POST `/api/generate-scenario`
 - リクエスト: `{ "transcript": "..." }`
 
 ## トラブルシューティング
