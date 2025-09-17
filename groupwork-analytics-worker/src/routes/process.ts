@@ -9,7 +9,7 @@ export const processRoutes = new Hono<{ Bindings: AppBindings }>();
 processRoutes.post('/process-request', zValidator('json', processRequestSchema), async (c) => {
   const { objectKey, sessionId, groupId } = c.req.valid('json');
   const webhookUrl = new URL(c.req.url);
-  webhookUrl.pathname = '/session/process';
+  webhookUrl.pathname = '/api/session/process';
   webhookUrl.searchParams.set('sessionId', sessionId);
   webhookUrl.searchParams.set('groupId', groupId);
   webhookUrl.searchParams.set('secret', c.env.WEBHOOK_SECRET);
