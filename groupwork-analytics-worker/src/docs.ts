@@ -3,6 +3,7 @@ import { swaggerUI } from '@hono/swagger-ui';
 import { scenarioSchema } from './schemas/scenario';
 import { processRequestSchema, webhookQuerySchema, runpodOutputSchema } from './schemas/process';
 import { listQuerySchema } from './schemas/utterances';
+import { sessionsQuerySchema } from './schemas/sessions';
 
 export const docsApp = new OpenAPIHono();
 
@@ -128,5 +129,34 @@ docsApp.openapi(
 
 // UI Swagger UIを表示する（相対参照にして /api 配下でも動作）
 docsApp.get('/docs', swaggerUI({ url: 'openapi.json' }));
+
+// GET /sessions（セッション単位の要約＋全文）
+docsApp.openapi(
+  createRoute({
+    method: 'get',
+    path: '/sessions',
+    request: { query: sessionsQuerySchema.openapi('SessionsQuery') },
+    responses: {
+      200: {
+        description: 'Sessions with summary and transcript',
+        content: {
+          'application/json': {
+            schema: z.array(
+              z.object({
+                session_id: z.string(),
+                group_id: z.string(),
+                datetime: z.string(),
+                utterance_count: z.number(),
+                sentiment_value: z.number(),
+                transcript: z.string(),
+              })
+            ).openapi('SessionsResponse'),
+          },
+        },
+      },
+    },
+  }),
+  (c) => c.json([])
+);
 
 

@@ -160,6 +160,26 @@ curl -X PUT "<uploadUrl>" -H "Content-Type: audio/flac" --data-binary @/path/to/
 - POST `/api/generate-scenario`
 - リクエスト: `{ "transcript": "..." }`
 
+7. セッション要約＋全文（新規）
+
+- GET `/api/sessions?group_id=<g>&start_time=<ISO>&end_time=<ISO>&limit=50&offset=0`
+- 返却（配列、1 要素=1 セッション）:
+  - `session_id`, `group_id`, `datetime`（最終更新）, `utterance_count`, `sentiment_value`, `transcript`（そのセッションの全文）
+  - 例:
+
+```json
+[
+  {
+    "session_id": "S1",
+    "group_id": "a",
+    "datetime": "2025-09-17T16:59:08.277Z",
+    "utterance_count": 20,
+    "sentiment_value": 0.3,
+    "transcript": "こっちは\nさっき持ってきた資料例は何でもある\n..."
+  }
+]
+```
+
 ## トラブルシューティング
 
 - CORS 500（`includes` エラー）: `ALLOWED_ORIGIN` 未設定。`.dev.vars` か `wrangler.toml [vars]` で設定
