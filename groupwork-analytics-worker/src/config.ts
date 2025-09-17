@@ -10,6 +10,7 @@ export type AppBindings = {
   RUNPOD_API_KEY: string;
   RUNPOD_ENDPOINT_ID?: string;
   WEBHOOK_SECRET: string;
+  PUBLIC_BASE_URL?: string;
 };
 
 export function getConfig(env: AppBindings) {
