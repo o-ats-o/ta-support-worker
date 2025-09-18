@@ -13,7 +13,14 @@ export const webhookQuerySchema = z.object({
 });
 
 export const runpodOutputSchema = z.object({
-  output: z.object({ segments: z.array(z.object({ text: z.string() })) }),
+  output: z.object({
+    segments: z.array(
+      z.object({
+        text: z.string(),
+        speaker: z.number().int().optional(),
+      })
+    ),
+  }),
 });
 
 

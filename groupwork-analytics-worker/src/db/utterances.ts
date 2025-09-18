@@ -3,9 +3,12 @@ export async function insertUtterances(db: D1Database, params: {
   groupId: string;
   texts: string[];
   createdAtIso: string;
+  speakers?: (number | null)[];
 }) {
-  const { sessionId, groupId, texts, createdAtIso } = params;
-  const statements = texts.map((t) => db.prepare('INSERT INTO utterances (session_id, group_id, utterance_text, created_at) VALUES (?,?,?,?)').bind(sessionId, groupId, t, createdAtIso));
+  const { sessionId, groupId, texts, createdAtIso, speakers } = params;
+  const statements = texts.map((t, idx) => db
+    .prepare('INSERT INTO utterances (session_id, group_id, utterance_text, created_at, speaker) VALUES (?,?,?,?,?)')
+    .bind(sessionId, groupId, t, createdAtIso, speakers ? speakers[idx] ?? null : null));
   // チャンク分割（D1のバッチ上限対策）
   const chunkSize = 100;
   for (let i = 0; i < statements.length; i += chunkSize) {

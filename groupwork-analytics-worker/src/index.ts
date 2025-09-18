@@ -25,8 +25,8 @@ api.route('/', processRoutes);
 api.route('/', webhookRoutes);
 api.route('/', utterancesRoutes);
 api.route('/', scenarioRoutes);
-api.route('/', docsApp);
 api.route('/', sessionsRoutes);
+api.route('/', docsApp);
 
 app.route('/api', api);
 

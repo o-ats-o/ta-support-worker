@@ -36,7 +36,13 @@ webhookRoutes.post('/session/process', zValidator('query', webhookQuerySchema), 
 
   const now = new Date().toISOString();
   try {
-    await insertUtterances(c.env.DB, { sessionId, groupId, texts: segments.map((s) => s.text), createdAtIso: now });
+    await insertUtterances(c.env.DB, {
+      sessionId,
+      groupId,
+      texts: segments.map((s) => s.text),
+      speakers: segments.map((s) => (typeof (s as any).speaker === 'number' ? (s as any).speaker : null)),
+      createdAtIso: now,
+    });
     await upsertSessionSummary(c.env.DB, { sessionId, groupId, utteranceCount, sentimentScore, updatedAtIso: now });
     return c.json({ success: true, message: `Processed ${utteranceCount} utterances.` });
   } catch (e: any) {

@@ -149,6 +149,7 @@ docsApp.openapi(
                 utterance_count: z.number(),
                 sentiment_value: z.number(),
                 transcript: z.string(),
+                transcript_diarize: z.string().nullable(),
               })
             ).openapi('SessionsResponse'),
           },

@@ -36,7 +36,8 @@ CREATE TABLE utterances (
   session_id TEXT NOT NULL,
   group_id TEXT NOT NULL,
   utterance_text TEXT NOT NULL,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  speaker INTEGER
 );
 
 -- セッションごとの集計データを格納するサマリーテーブル
