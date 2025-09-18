@@ -20,13 +20,41 @@ webhookRoutes.post('/session/process', zValidator('query', webhookQuerySchema), 
     return c.json({ error: 'Invalid webhook payload' }, 400);
   }
 
-  const { segments } = validation.data.output;
-  const utteranceCount = segments.length;
+  // RunPod 側の出力フォーマット差異を吸収
+  const output: any = validation.data.output as any;
+  let normalizedSegments: Array<{ text: string; speaker?: number | null }> = [];
+  if (Array.isArray(output?.segments)) {
+    normalizedSegments = output.segments
+      .map((s: any) => ({
+        text: String(s.text ?? ''),
+        speaker: typeof s.speaker === 'number'
+          ? s.speaker
+          : (typeof s.speaker === 'string' && /SPEAKER_(\d+)/i.test(s.speaker)
+              ? Number((s.speaker as string).match(/SPEAKER_(\d+)/i)![1])
+              : null),
+      }))
+      .filter((s: any) => s.text);
+  } else if (typeof output?.text === 'string' && output.text) {
+    normalizedSegments = [{ text: output.text }];
+  } else if (Array.isArray(output?.diarization?.segments)) {
+    normalizedSegments = output.diarization.segments
+      .map((s: any) => ({
+        text: String(s.text ?? ''),
+        speaker: typeof s.speaker === 'number'
+          ? s.speaker
+          : (typeof s.speaker === 'string' && /SPEAKER_(\d+)/i.test(s.speaker)
+              ? Number((s.speaker as string).match(/SPEAKER_(\d+)/i)![1])
+              : null),
+      }))
+      .filter((s: any) => s.text);
+  }
+
+  const utteranceCount = normalizedSegments.length;
   if (utteranceCount === 0) {
     return c.json({ success: true, message: 'No utterances to process.' }, 200);
   }
 
-  const fullTranscript = segments.map((s) => s.text).join('\n');
+  const fullTranscript = normalizedSegments.map((s) => s.text).join('\n');
   let sentimentScore = 0.0;
   try {
     sentimentScore = await analyzeSentiment(fullTranscript, c.env.GOOGLE_API_KEY);
@@ -39,8 +67,8 @@ webhookRoutes.post('/session/process', zValidator('query', webhookQuerySchema), 
     await insertUtterances(c.env.DB, {
       sessionId,
       groupId,
-      texts: segments.map((s) => s.text),
-      speakers: segments.map((s) => (typeof (s as any).speaker === 'number' ? (s as any).speaker : null)),
+      texts: normalizedSegments.map((s) => s.text),
+      speakers: normalizedSegments.map((s) => (typeof s.speaker === 'number' ? s.speaker : null)),
       createdAtIso: now,
     });
     await upsertSessionSummary(c.env.DB, { sessionId, groupId, utteranceCount, sentimentScore, updatedAtIso: now });

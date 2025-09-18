@@ -12,15 +12,35 @@ export const webhookQuerySchema = z.object({
   secret: z.string().min(1),
 });
 
-export const runpodOutputSchema = z.object({
-  output: z.object({
-    segments: z.array(
-      z.object({
-        text: z.string(),
-        speaker: z.number().int().optional(),
-      })
-    ),
-  }),
-});
+const baseSegment = z
+  .object({
+    text: z.string(),
+    speaker: z.union([z.number().int(), z.string()]).optional().nullable(),
+  })
+  .passthrough();
+
+const segmentsSchema = z
+  .object({
+    segments: z.array(baseSegment),
+  })
+  .passthrough();
+
+const textSchema = z.object({ text: z.string().min(1) });
+
+const diarizationSchema = z
+  .object({
+    diarization: z.object({
+      segments: z.array(
+        baseSegment.extend({ start: z.number().optional(), end: z.number().optional() })
+      ),
+    }),
+  })
+  .passthrough();
+
+export const runpodOutputSchema = z
+  .object({
+    output: z.union([segmentsSchema, textSchema, diarizationSchema]),
+  })
+  .passthrough();
 
 

@@ -8,8 +8,11 @@ export const processRoutes = new Hono<{ Bindings: AppBindings }>();
 
 processRoutes.post('/process-request', zValidator('json', processRequestSchema), async (c) => {
   const { objectKey, sessionId, groupId } = c.req.valid('json');
-  const webhookUrl = new URL(c.req.url);
-  webhookUrl.pathname = '/api/session/process';
+  // Webhook URL は公開到達可能なベース URL を優先
+  const base = c.env.PUBLIC_BASE_URL && /^https?:\/\//.test(c.env.PUBLIC_BASE_URL)
+    ? c.env.PUBLIC_BASE_URL
+    : (new URL(c.req.url)).origin;
+  const webhookUrl = new URL('/api/session/process', base);
   webhookUrl.searchParams.set('sessionId', sessionId);
   webhookUrl.searchParams.set('groupId', groupId);
   webhookUrl.searchParams.set('secret', c.env.WEBHOOK_SECRET);
