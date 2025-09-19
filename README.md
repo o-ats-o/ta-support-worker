@@ -9,7 +9,7 @@ Cloudflare Workers 上で動作する音声アップロード・文字起こし�
 - Webhook 受信で発話を保存し、Google NLP で感情スコアを計算して集計（D1）
 - OpenAI API で指導シナリオ生成
 - OpenAPI（Zod）→ Swagger UI で /docs 提供
-- Miro 連携（1 グループ=1 ボード運用）：同期・差分保存・差分参照 API
+- Miro 連携（1 グループ=1 ボード運用想定。ただしクライアント POST でマッピング）：同期・差分保存・差分参照 API
 
 ## 技術スタック
 
@@ -182,27 +182,27 @@ curl -X PUT "<uploadUrl>" -H "Content-Type: audio/flac" --data-binary @/path/to/
 ]
 ```
 
-8. Miro 同期・差分・最新（新規）
+8. Miro 同期・差分・最新（新規・マッピング運用）
 
-- 前提: 1 グループ=1 ボード運用（board_id ≒ group_id）
-- 同期（差分作成）
+- 前提: フロント（GET 側）は group_id のみを使用。クライアント（POST 側）は group_id と board_id を送信してマッピング登録。
+- 同期（差分作成・マッピング登録/更新）
 
 ```bash
 curl -X POST http://localhost:8787/api/miro/sync \
   -H 'Content-Type: application/json' \
-  -d '{"group_id":"g1", "types":["sticky_note","line"]}'
+  -d '{"group_id":"G1","board_id":"b-xxxx","types":["sticky_note","line"]}'
 ```
 
 - 差分取得
 
 ```bash
-curl 'http://localhost:8787/api/miro/diffs?group_id=g1&since=2025-09-18T00:00:00Z&limit=50'
+curl 'http://localhost:8787/api/miro/diffs?group_id=G1&since=2025-09-18T00:00:00Z&limit=50'
 ```
 
 - 最新アイテム
 
 ```bash
-curl 'http://localhost:8787/api/miro/items?group_id=g1&include_deleted=false&limit=100'
+curl 'http://localhost:8787/api/miro/items?group_id=G1&include_deleted=false&limit=100'
 ```
 
 備考: `types`は必要時のみ指定。未指定なら全アイテム対象。

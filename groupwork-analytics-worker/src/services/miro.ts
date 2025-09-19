@@ -59,7 +59,23 @@ export async function fetchBoardItems(params: {
   return items;
 }
 
-// group_id = board_id 運用のため、解決・マッピング処理は不要
+// マッピング: group_id -> board_id を保存・解決
+export async function upsertBoardMap(env: AppBindings, groupId: string, boardId: string) {
+  const now = new Date().toISOString();
+  await env.DB.prepare(
+    'INSERT INTO miro_board_map (group_id, board_id, created_at, updated_at) VALUES (?, ?, ?, ?)\nON CONFLICT(group_id) DO UPDATE SET board_id = excluded.board_id, updated_at = excluded.updated_at'
+  )
+    .bind(groupId, boardId, now, now)
+    .run();
+}
+
+export async function resolveBoardId(env: AppBindings, groupId: string): Promise<string> {
+  const row = await env.DB.prepare('SELECT board_id FROM miro_board_map WHERE group_id = ?')
+    .bind(groupId)
+    .first<{ board_id: string }>();
+  if (!row?.board_id) throw new Error(`No board mapped for group_id=${groupId}`);
+  return row.board_id;
+}
 
 export async function syncBoardAndDiff(env: AppBindings, boardId: string, opts?: { types?: string[] }) {
   const types = opts?.types;

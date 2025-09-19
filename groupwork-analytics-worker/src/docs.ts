@@ -129,7 +129,7 @@ docsApp.openapi(
 );
 
 // --- Miro ---
-// POST /miro/sync
+// POST /miro/sync（マッピング登録/更新 + 同期・差分作成）
 docsApp.openapi(
   createRoute({
     method: 'post',
@@ -145,13 +145,13 @@ docsApp.openapi(
       },
     },
     responses: {
-      200: { description: 'Synced and diff created' },
+      200: { description: 'Mapping upserted, synced and diff created' },
     },
   }),
   (c) => c.json({})
 );
 
-// GET /miro/diffs
+// GET /miro/diffs（group_id を board_id に解決して履歴を返す）
 docsApp.openapi(
   createRoute({
     method: 'get',
@@ -164,7 +164,7 @@ docsApp.openapi(
   (c) => c.json([])
 );
 
-// GET /miro/items
+// GET /miro/items（group_id を board_id に解決して最新状態を返す）
 docsApp.openapi(
   createRoute({
     method: 'get',
