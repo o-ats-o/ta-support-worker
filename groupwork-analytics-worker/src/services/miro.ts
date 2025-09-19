@@ -36,7 +36,8 @@ export async function fetchBoardItems(params: {
     .filter((t) => t.length > 0);
   const items: MiroItem[] = [];
   let url = new URL(`${MIRO_API_BASE}/boards/${encodeURIComponent(boardId)}/items`);
-  url.searchParams.set('limit', '100');
+  // Miro API: maximum items page size is 50
+  url.searchParams.set('limit', '50');
   if (types.length > 0) {
     // Miro v2 は type フィルタをクエリに受け付ける。複数はカンマ区切り
     url.searchParams.set('type', types.join(','));
@@ -55,7 +56,11 @@ export async function fetchBoardItems(params: {
     const json: any = await res.json();
     const data: any[] = json?.data ?? json?.items ?? [];
     for (const it of data) items.push(it as MiroItem);
-    const newCursor = json?.cursor?.after;
+    // Miroのレスポンスは cursor が文字列の場合と、オブジェクト（after/next プロパティ）で返る場合がある
+    const newCursor: string | undefined =
+      typeof json?.cursor === 'string'
+        ? json.cursor
+        : json?.cursor?.after ?? json?.cursor?.next ?? undefined;
     if (!newCursor) break;
     cursor = newCursor;
   }
