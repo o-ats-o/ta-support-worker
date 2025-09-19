@@ -4,6 +4,7 @@ import { scenarioSchema } from './schemas/scenario';
 import { processRequestSchema, webhookQuerySchema, runpodOutputSchema } from './schemas/process';
 import { listQuerySchema } from './schemas/utterances';
 import { sessionsQuerySchema } from './schemas/sessions';
+import { miroDiffsQuerySchema, miroItemsQuerySchema, miroSyncBodySchema } from './schemas/miro';
 
 export const docsApp = new OpenAPIHono();
 
@@ -127,6 +128,55 @@ docsApp.openapi(
   (c) => c.json({})
 );
 
+// --- Miro ---
+// POST /miro/sync
+docsApp.openapi(
+  createRoute({
+    method: 'post',
+    path: '/miro/sync',
+    request: {
+      body: {
+        content: {
+          'application/json': {
+            schema: miroSyncBodySchema.openapi('MiroSyncRequest'),
+          },
+        },
+        required: true,
+      },
+    },
+    responses: {
+      200: { description: 'Synced and diff created' },
+    },
+  }),
+  (c) => c.json({})
+);
+
+// GET /miro/diffs
+docsApp.openapi(
+  createRoute({
+    method: 'get',
+    path: '/miro/diffs',
+    request: { query: miroDiffsQuerySchema.openapi('MiroDiffsQuery') },
+    responses: {
+      200: { description: 'Diff history' },
+    },
+  }),
+  (c) => c.json([])
+);
+
+// GET /miro/items
+docsApp.openapi(
+  createRoute({
+    method: 'get',
+    path: '/miro/items',
+    request: { query: miroItemsQuerySchema.openapi('MiroItemsQuery') },
+    responses: {
+      200: { description: 'Latest items' },
+    },
+  }),
+  (c) => c.json([])
+);
+
 // UI Swagger UIを表示する（相対参照にして /api 配下でも動作）
 docsApp.get('/docs', swaggerUI({ url: 'openapi.json' }));
 
@@ -159,5 +209,3 @@ docsApp.openapi(
   }),
   (c) => c.json([])
 );
-
-
