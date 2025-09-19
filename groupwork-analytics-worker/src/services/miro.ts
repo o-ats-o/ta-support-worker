@@ -30,11 +30,14 @@ export async function fetchBoardItems(params: {
   boardId: string;
   types?: string[];
 }): Promise<MiroItem[]> {
-  const { token, boardId, types } = params;
+  const { token, boardId } = params;
+  const types = (params.types ?? [])
+    .map((t) => String(t || '').trim())
+    .filter((t) => t.length > 0);
   const items: MiroItem[] = [];
   let url = new URL(`${MIRO_API_BASE}/boards/${encodeURIComponent(boardId)}/items`);
   url.searchParams.set('limit', '100');
-  if (types && types.length > 0) {
+  if (types.length > 0) {
     // Miro v2 は type フィルタをクエリに受け付ける。複数はカンマ区切り
     url.searchParams.set('type', types.join(','));
   }
@@ -43,7 +46,7 @@ export async function fetchBoardItems(params: {
     const fetchUrl = new URL(url.toString());
     if (cursor) fetchUrl.searchParams.set('cursor', cursor);
     const res = await fetch(fetchUrl.toString(), {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
     });
     if (!res.ok) {
       const body = await res.text().catch(() => '');
