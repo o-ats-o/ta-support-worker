@@ -9,6 +9,7 @@ import { getConfig, type AppBindings } from './config';
 import { docsApp } from './docs';
 import { sessionsRoutes } from './routes/sessions';
 import { miroRoutes } from './routes/miro';
+import { recommendRoutes } from './routes/recommend';
 
 const app = new Hono<{ Bindings: AppBindings }>();
 const api = new Hono<{ Bindings: AppBindings }>();
@@ -28,6 +29,7 @@ api.route('/', utterancesRoutes);
 api.route('/', scenarioRoutes);
 api.route('/', sessionsRoutes);
 api.route('/', miroRoutes);
+api.route('/', recommendRoutes);
 api.route('/', docsApp);
 
 app.route('/api', api);
