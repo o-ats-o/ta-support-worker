@@ -182,7 +182,43 @@ curl -X PUT "<uploadUrl>" -H "Content-Type: audio/flac" --data-binary @/path/to/
 ]
 ```
 
-8. Miro 同期・差分・最新（新規・マッピング運用）
+8. グループ推薦（固定 5 分ウィンドウ）
+
+- 役割: 指定した 5 分区間で各グループの発話件数・Miro 作業量・平均感情を集計し、正規化スコアの昇順で返す
+- エンドポイント: `GET /api/groups/recommendations`
+- クエリ:
+  - `start` 必須（ISO）例: `2025-09-19T09:00:00Z`
+  - `end` 任意（未指定は start+5 分）。`(end - start) === 5分` 以外は 400
+  - `limit` 任意（未指定または 0 で全件）
+  - `w_u,w_m,w_s` 任意（デフォルト 0.5/0.4/0.1）
+- 例:
+
+```bash
+# 全件（limit 省略）
+curl 'http://localhost:8787/api/groups/recommendations?start=2025-09-19T09:00:00Z&end=2025-09-19T09:05:00Z'
+
+# 上位N件のみ（例: 2件）
+curl 'http://localhost:8787/api/groups/recommendations?start=2025-09-19T09:00:00Z&end=2025-09-19T09:05:00Z&limit=2'
+```
+
+- レスポンス（score 小=要観察度高い）
+
+```json
+[
+  {
+    "group_id": "G7",
+    "score": 0.18,
+    "metrics": { "utterances": 2, "miro": 3, "sentiment_avg": -0.05 }
+  },
+  {
+    "group_id": "G3",
+    "score": 0.25,
+    "metrics": { "utterances": 3, "miro": 4, "sentiment_avg": 0.0 }
+  }
+]
+```
+
+9. Miro 同期・差分・最新（新規・マッピング運用）
 
 - 前提: フロント（GET 側）は group_id のみを使用。クライアント（POST 側）は group_id と board_id を送信してマッピング登録。
 - 同期（差分作成・マッピング登録/更新）

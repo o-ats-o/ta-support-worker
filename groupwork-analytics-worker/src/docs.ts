@@ -4,6 +4,7 @@ import { scenarioSchema } from './schemas/scenario';
 import { processRequestSchema, webhookQuerySchema, runpodOutputSchema } from './schemas/process';
 import { listQuerySchema } from './schemas/utterances';
 import { sessionsQuerySchema } from './schemas/sessions';
+import { recommendQuerySchema } from './schemas/recommend';
 import { miroDiffsQuerySchema, miroItemsQuerySchema, miroSyncBodySchema } from './schemas/miro';
 
 export const docsApp = new OpenAPIHono();
@@ -177,9 +178,6 @@ docsApp.openapi(
   (c) => c.json([])
 );
 
-// UI Swagger UIを表示する（相対参照にして /api 配下でも動作）
-docsApp.get('/docs', swaggerUI({ url: 'openapi.json' }));
-
 // GET /sessions（セッション単位の要約＋全文）
 docsApp.openapi(
   createRoute({
@@ -209,3 +207,39 @@ docsApp.openapi(
   }),
   (c) => c.json([])
 );
+
+// GET /groups/recommendations（固定5分ウィンドウの推薦）
+docsApp.openapi(
+  createRoute({
+    method: 'get',
+    path: '/groups/recommendations',
+    request: { query: recommendQuerySchema.openapi('RecommendQuery') },
+    responses: {
+      200: {
+        description: 'Group recommendations for the 5-minute window (limit omitted => all)',
+        content: {
+          'application/json': {
+            schema: z
+              .array(
+                z.object({
+                  group_id: z.string(),
+                  score: z.number(),
+                  metrics: z.object({
+                    utterances: z.number(),
+                    miro: z.number(),
+                    sentiment_avg: z.number(),
+                  }),
+                })
+              )
+              .openapi('RecommendResponse'),
+          },
+        },
+      },
+      400: { description: 'Invalid window (must be exactly 5 minutes) or bad params' },
+    },
+  }),
+  (c) => c.json([])
+);
+
+// UI Swagger UIを表示する（相対参照にして /api 配下でも動作）
+docsApp.get('/docs', swaggerUI({ url: 'openapi.json' }));
