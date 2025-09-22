@@ -15,7 +15,7 @@ function minMaxNormalize(values: number[]): (v: number) => number {
 export const recommendRoutes = new Hono<{ Bindings: AppBindings }>();
 
 recommendRoutes.get('/groups/recommendations', zValidator('query', recommendQuerySchema), async (c) => {
-  const { start, end: endRaw, limit, w_u, w_m, w_s } = c.req.valid('query');
+  const { start, end: endRaw, limit } = c.req.valid('query');
   const startMs = new Date(start).getTime();
   const endMs = endRaw ? new Date(endRaw).getTime() : new Date(new Date(start).getTime() + 5 * 60 * 1000).getTime();
   if (isNaN(startMs) || isNaN(endMs)) return c.json({ error: 'Invalid datetime' }, 400);
