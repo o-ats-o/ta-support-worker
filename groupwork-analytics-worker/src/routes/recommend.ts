@@ -92,7 +92,11 @@ recommendRoutes.get('/groups/recommendations', zValidator('query', recommendQuer
 
   const scored = groupIds.map((g) => {
     const m = metrics[g];
-    const score = w_u * uN(m.utterances) + w_m * mN(m.miro) + w_s * (1 - sN(m.sentiment));
+    // すべて「低いほど優先」の向きに統一し、重みは1:1:1（平均）
+    const u = uN(m.utterances);
+    const mi = mN(m.miro);
+    const s = sN(m.sentiment);
+    const score = (u + mi + s) / 3;
     return { group_id: g, score, metrics: { utterances: m.utterances, miro: m.miro, sentiment_avg: m.sentiment } };
   });
   scored.sort((a, b) => a.score - b.score);
@@ -108,5 +112,3 @@ function safeLen(jsonText: string): number {
     return 0;
   }
 }
-
-

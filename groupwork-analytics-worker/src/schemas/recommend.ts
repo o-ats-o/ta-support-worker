@@ -10,9 +10,6 @@ export const recommendQuerySchema = z
       .optional()
       .default('0')
       .transform((v) => Math.min(Math.max(Number(v) || 0, 0), 100)),
-    w_u: z.string().optional().default('0.5').transform((v) => Number(v) || 0.5),
-    w_m: z.string().optional().default('0.4').transform((v) => Number(v) || 0.4),
-    w_s: z.string().optional().default('0.1').transform((v) => Number(v) || 0.1),
   })
   .strict();
 
