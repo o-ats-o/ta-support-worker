@@ -5,11 +5,14 @@ import { recommendQuerySchema } from '../schemas/recommend';
 
 type Metrics = { utterances: number; miro: number; sentiment: number };
 
-function minMaxNormalize(values: number[]): (v: number) => number {
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  if (!isFinite(min) || !isFinite(max) || max === min) return () => 0.5;
-  return (v: number) => (v - min) / (max - min);
+function zScoreNormalize(values: number[]): (v: number) => number {
+  const n = values.length;
+  if (!n) return () => 0;
+  const mean = values.reduce((a, b) => a + b, 0) / n;
+  const variance = values.reduce((a, b) => a + (b - mean) * (b - mean), 0) / n;
+  const std = Math.sqrt(variance);
+  if (!isFinite(std) || std === 0) return () => 0; // 全員同値 → 中立
+  return (v: number) => (v - mean) / std;
 }
 
 export const recommendRoutes = new Hono<{ Bindings: AppBindings }>();
@@ -86,13 +89,13 @@ recommendRoutes.get('/groups/recommendations', zValidator('query', recommendQuer
   const uVals = groupIds.map((g) => metrics[g].utterances);
   const mVals = groupIds.map((g) => metrics[g].miro);
   const sVals = groupIds.map((g) => metrics[g].sentiment);
-  const uN = minMaxNormalize(uVals);
-  const mN = minMaxNormalize(mVals);
-  const sN = minMaxNormalize(sVals);
+  const uN = zScoreNormalize(uVals);
+  const mN = zScoreNormalize(mVals);
+  const sN = zScoreNormalize(sVals);
 
   const scored = groupIds.map((g) => {
     const m = metrics[g];
-    // すべて「低いほど優先」の向きに統一し、重みは1:1:1（平均）
+    // すべて「低いほど優先」の向きに統一し、Z-score の 1:1:1 平均
     const u = uN(m.utterances);
     const mi = mN(m.miro);
     const s = sN(m.sentiment);

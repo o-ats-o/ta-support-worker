@@ -184,7 +184,7 @@ curl -X PUT "<uploadUrl>" -H "Content-Type: audio/flac" --data-binary @/path/to/
 
 8. グループ推薦（固定 5 分ウィンドウ）
 
-- 役割: 指定した 5 分区間で各グループの発話件数・Miro 作業量・平均感情を集計し、正規化スコアの昇順で返す
+- 役割: 指定した 5 分区間で各グループの発話件数・Miro 作業量・平均感情を集計し、Z-score 標準化した 3 指標の平均（低いほど優先）で返す
 - エンドポイント: `GET /api/groups/recommendations`
 - クエリ:
   - `start` 必須（ISO）例: `2025-09-19T09:00:00Z`

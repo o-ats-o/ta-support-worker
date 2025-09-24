@@ -216,7 +216,7 @@ docsApp.openapi(
     request: { query: recommendQuerySchema.openapi('RecommendQuery') },
     responses: {
       200: {
-        description: 'Group recommendations for the 5-minute window (limit omitted => all). Score is the mean of three min-max normalized metrics: lower utterances, lower miro, lower sentiment => lower score (higher priority).',
+        description: 'Group recommendations for the 5-minute window (limit omitted => all). Score is the mean of three Z-score standardized metrics (utterances, miro, sentiment). Lower score = higher priority (lower activity/negative sentiment).',
         content: {
           'application/json': {
             schema: z
