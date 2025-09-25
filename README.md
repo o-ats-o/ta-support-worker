@@ -253,7 +253,34 @@ curl 'http://localhost:8787/api/groups/recommendations?start=2025-09-19T09:00:00
 }
 ```
 
-9. Miro 同期・差分・最新（新規・マッピング運用）
+9. リアルタイム更新（SSE）
+
+- 役割: 最新 5 分窓の切替・新規データ到着を即時通知
+- エンドポイント: `GET /api/events?delay_ms=30000&step_ms=300000`
+- イベント種別:
+  - `window_status`: 接続直後の状態 `{ now, latest_window{start,end} }`
+  - `window_tick`: サーバ時計で 5 分窓が切り替わったとき `{ latest_window }`
+  - `data_ready`: Webhook 処理完了 `{ group_id, session_id, at, window{start,end} }`
+  - コメント（`: heartbeat`）: 25 秒ごとの心拍
+
+フロント実装例:
+
+```ts
+const es = new EventSource("/api/events?delay_ms=30000&step_ms=300000");
+es.addEventListener("window_status", (e) => {
+  const { latest_window } = JSON.parse(e.data);
+});
+es.addEventListener("window_tick", (e) => {
+  const { latest_window } = JSON.parse(e.data);
+  // LIVEモードなら /sessions を最新窓で再取得
+});
+es.addEventListener("data_ready", (e) => {
+  const { group_id, window } = JSON.parse(e.data);
+  // バッジ表示や該当グループのみの強調など
+});
+```
+
+10. Miro 同期・差分・最新（新規・マッピング運用）
 
 - 前提: フロント（GET 側）は group_id のみを使用。クライアント（POST 側）は group_id と board_id を送信してマッピング登録。
 - 同期（差分作成・マッピング登録/更新）
