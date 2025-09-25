@@ -77,6 +77,37 @@ recommendRoutes.get('/groups/recommendations', zValidator('query', recommendQuer
     .all<{ group_id: string; avg_s: number }>();
   for (const r of sRows ?? []) sentiMap.set(r.group_id, Number(r.avg_s) || 0);
 
+  // 直前5分（前窓）の集計
+  const prevStartIso = new Date(startMs - 5 * 60 * 1000).toISOString();
+  const prevEndIso = new Date(startMs).toISOString();
+  const prevUtterMap = new Map<string, number>();
+  const { results: puRows } = await c.env.DB
+    .prepare('SELECT group_id, COUNT(*) as cnt FROM utterances WHERE created_at > ? AND created_at <= ? GROUP BY group_id')
+    .bind(prevStartIso, prevEndIso)
+    .all<{ group_id: string; cnt: number }>();
+  for (const r of puRows ?? []) prevUtterMap.set(r.group_id, Number(r.cnt) || 0);
+
+  const prevMiroMap = new Map<string, number>();
+  const { results: pdRows } = await c.env.DB
+    .prepare('SELECT board_id, added, updated, deleted FROM miro_diffs WHERE diff_at > ? AND diff_at <= ?')
+    .bind(prevStartIso, prevEndIso)
+    .all<{ board_id: string; added: string; updated: string; deleted: string }>();
+  for (const r of pdRows ?? []) {
+    const g = boardToGroup.get(r.board_id);
+    if (!g) continue;
+    const add = safeLen(r.added);
+    const upd = safeLen(r.updated);
+    const del = safeLen(r.deleted);
+    prevMiroMap.set(g, (prevMiroMap.get(g) || 0) + add + upd + del);
+  }
+
+  const prevSentiMap = new Map<string, number>();
+  const { results: psRows } = await c.env.DB
+    .prepare('SELECT group_id, AVG(sentiment_score) as avg_s FROM session_summary WHERE last_updated_at > ? AND last_updated_at <= ? GROUP BY group_id')
+    .bind(prevStartIso, prevEndIso)
+    .all<{ group_id: string; avg_s: number }>();
+  for (const r of psRows ?? []) prevSentiMap.set(r.group_id, Number(r.avg_s) || 0);
+
   // 統合とスコアリング
   const metrics: Record<string, Metrics> = {};
   for (const g of groupIds) {
@@ -93,16 +124,49 @@ recommendRoutes.get('/groups/recommendations', zValidator('query', recommendQuer
   const mN = zScoreNormalize(mVals);
   const sN = zScoreNormalize(sVals);
 
-  const scored = groupIds.map((g) => {
+  let scored = groupIds.map((g) => {
     const m = metrics[g];
     // すべて「低いほど優先」の向きに統一し、Z-score の 1:1:1 平均
     const u = uN(m.utterances);
     const mi = mN(m.miro);
     const s = sN(m.sentiment);
     const score = (u + mi + s) / 3;
-    return { group_id: g, score, metrics: { utterances: m.utterances, miro: m.miro, sentiment_avg: m.sentiment } };
+    const prev = {
+      utterances: prevUtterMap.get(g) || 0,
+      miro: prevMiroMap.get(g) || 0,
+      sentiment_avg: prevSentiMap.get(g) ?? 0,
+    };
+    const deltas = {
+      utterances: m.utterances - prev.utterances,
+      miro: m.miro - prev.miro,
+      sentiment_avg: m.sentiment - prev.sentiment_avg,
+    };
+    const reasons: string[] = [];
+    if (u <= -0.5) reasons.push('発話回数が少ない');
+    if (s <= -0.5 || m.sentiment < 0) reasons.push('感情がネガティブ');
+    if (mi <= -0.5) reasons.push('Miroの作業量が少ない');
+    return {
+      group_id: g,
+      score,
+      metrics: { utterances: m.utterances, miro: m.miro, sentiment_avg: m.sentiment },
+      prev_metrics: prev,
+      deltas,
+      subscores_z: { utterances_z: u, miro_z: mi, sentiment_z: s },
+      reasons,
+    };
   });
-  scored.sort((a, b) => a.score - b.score);
+  // スコアが同値のときは発話→Miro→感情の順でタイブレーク
+  scored.sort((a, b) =>
+    a.score !== b.score
+      ? a.score - b.score
+      : a.metrics.utterances !== b.metrics.utterances
+      ? a.metrics.utterances - b.metrics.utterances
+      : a.metrics.miro !== b.metrics.miro
+      ? a.metrics.miro - b.metrics.miro
+      : a.metrics.sentiment_avg - b.metrics.sentiment_avg
+  );
+  // ランク番号を付与（フロント側で先頭2件を優先観察として利用）
+  scored = scored.map((item, idx) => ({ ...item, rank: idx + 1 }));
   if (limit && limit > 0) return c.json(scored.slice(0, limit));
   return c.json(scored);
 });
