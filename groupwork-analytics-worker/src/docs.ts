@@ -223,12 +223,35 @@ docsApp.openapi(
               .array(
                 z.object({
                   group_id: z.string(),
+                  rank: z.number().optional(),
                   score: z.number(),
                   metrics: z.object({
                     utterances: z.number(),
                     miro: z.number(),
                     sentiment_avg: z.number(),
                   }),
+                  prev_metrics: z
+                    .object({
+                      utterances: z.number(),
+                      miro: z.number(),
+                      sentiment_avg: z.number(),
+                    })
+                    .optional(),
+                  deltas: z
+                    .object({
+                      utterances: z.number(),
+                      miro: z.number(),
+                      sentiment_avg: z.number(),
+                    })
+                    .optional(),
+                  subscores_z: z
+                    .object({
+                      utterances_z: z.number(),
+                      miro_z: z.number(),
+                      sentiment_z: z.number(),
+                    })
+                    .optional(),
+                  reasons: z.array(z.string()).optional(),
                 })
               )
               .openapi('RecommendResponse'),
