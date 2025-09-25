@@ -33,7 +33,9 @@ Cloudflare Workers 上で動作する音声アップロード・文字起こし�
     │   │   ├── process.ts      # /process-request
     │   │   ├── webhook.ts      # /session/process
     │   │   ├── utterances.ts   # /utterances
-    │   │   └── scenario.ts     # /generate-scenario
+    │   │   ├── scenario.ts     # /generate-scenario
+    │   │   ├── sessions.ts     # /sessions （グループ一覧メトリクス）
+    │   │   └── timeseries.ts   # /groups/timeseries （5バケット時系列）
     │   ├── services/           # 外部API呼び出し（RunPod/Google/OpenAI/R2）
     │   ├── db/                 # D1 アクセス
     │   ├── schemas/            # Zod スキーマ
@@ -162,22 +164,25 @@ curl -X PUT "<uploadUrl>" -H "Content-Type: audio/flac" --data-binary @/path/to/
 - POST `/api/generate-scenario`
 - リクエスト: `{ "transcript": "..." }`
 
-7. セッション要約＋全文（新規）
+7. グループ一覧
 
-- GET `/api/sessions?group_id=<g>&start_time=<ISO>&end_time=<ISO>&limit=50&offset=0`
-- 返却（配列、1 要素=1 セッション）:
-  - `session_id`, `group_id`, `datetime`（最終更新）, `utterance_count`, `sentiment_value`, `transcript`（そのセッションの全文）
-  - 例:
+- GET `/api/sessions?start_time=<ISO>&end_time=<ISO>`
+- 役割: 左カラムのグループ一覧用メトリクスを返す（指定窓と直前窓の比較）
+- 返却（配列、1 要素=1 グループ）:
+  - `group_id`
+  - `metrics` { `utterances`, `miro`, `sentiment_avg` }
+  - `prev_metrics` { 同上 }
+  - `deltas` { 同上（現 − 前） }
+
+例:
 
 ```json
 [
   {
-    "session_id": "S1",
-    "group_id": "a",
-    "datetime": "2025-09-17T16:59:08.277Z",
-    "utterance_count": 20,
-    "sentiment_value": 0.3,
-    "transcript": "こっちは\nさっき持ってきた資料例は何でもある\n..."
+    "group_id": "Group A",
+    "metrics": { "utterances": 3, "miro": 18, "sentiment_avg": -0.2 },
+    "prev_metrics": { "utterances": 1, "miro": 15, "sentiment_avg": 0.1 },
+    "deltas": { "utterances": 2, "miro": 3, "sentiment_avg": -0.3 }
   }
 ]
 ```
@@ -216,6 +221,36 @@ curl 'http://localhost:8787/api/groups/recommendations?start=2025-09-19T09:00:00
     "metrics": { "utterances": 3, "miro": 4, "sentiment_avg": 0.0 }
   }
 ]
+```
+
+8. 時間推移（5 バケット）
+
+- 役割: 選択した 5 分窓と、その直前 4 窓の合計 5 バケット（古 → 新）を返す
+- エンドポイント: `GET /api/groups/timeseries?group_ids=G1,G2&start=<ISO>&end=<ISO>`（`end` 省略時は `start+5分`）
+- 返却:
+
+```json
+{
+  "window_ms": 300000,
+  "buckets": [
+    {
+      "start": "2025-09-19T08:40:00.000Z",
+      "end":   "2025-09-19T08:45:00.000Z",
+      "items": [
+        { "group_id": "Group A", "utterances": 1, "miro": 0, "sentiment_avg": -0.1 },
+        { "group_id": "Group B", "utterances": 0, "miro": 2, "sentiment_avg": 0.0 }
+      ]
+    },
+    {
+      "start": "2025-09-19T08:45:00.000Z",
+      "end":   "2025-09-19T08:50:00.000Z",
+      "items": [
+        { "group_id": "Group A", "utterances": 2, "miro": 1, "sentiment_avg": 0.05 },
+        { "group_id": "Group B", "utterances": 1, "miro": 0, "sentiment_avg": -0.02 }
+      ]
+    }
+     // ... 計5バケット（最後が選択窓）
+}
 ```
 
 9. Miro 同期・差分・最新（新規・マッピング運用）
