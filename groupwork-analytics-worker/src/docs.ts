@@ -5,6 +5,7 @@ import { processRequestSchema, webhookQuerySchema, runpodOutputSchema } from './
 import { listQuerySchema } from './schemas/utterances';
 import { sessionsQuerySchema } from './schemas/sessions';
 import { recommendQuerySchema } from './schemas/recommend';
+import { timeseriesQuerySchema } from './schemas/timeseries';
 import { miroDiffsQuerySchema, miroItemsQuerySchema, miroSyncBodySchema } from './schemas/miro';
 
 export const docsApp = new OpenAPIHono();
@@ -165,6 +166,44 @@ docsApp.openapi(
   (c) => c.json([])
 );
 
+// GET /groups/timeseries（選択窓と直前窓のメトリクスを返す）
+docsApp.openapi(
+  createRoute({
+    method: 'get',
+    path: '/groups/timeseries',
+    request: { query: timeseriesQuerySchema.openapi('TimeseriesQuery') },
+    responses: {
+      200: {
+        description: 'Five buckets: selected 5-minute window and preceding four windows (older -> newer).',
+        content: {
+          'application/json': {
+            schema: z
+              .object({
+                window_ms: z.number(),
+                buckets: z.array(
+                  z.object({
+                    start: z.string(),
+                    end: z.string(),
+                    items: z.array(
+                      z.object({
+                        group_id: z.string(),
+                        utterances: z.number(),
+                        miro: z.number(),
+                        sentiment_avg: z.number(),
+                      })
+                    ),
+                  })
+                ),
+              })
+              .openapi('TimeseriesResponse'),
+          },
+        },
+      },
+    },
+  }),
+  (c) => c.json({ window_ms: 300000, buckets: [] })
+);
+
 // GET /miro/items（group_id を board_id に解決して最新状態を返す）
 docsApp.openapi(
   createRoute({
@@ -178,7 +217,7 @@ docsApp.openapi(
   (c) => c.json([])
 );
 
-// GET /sessions（セッション単位の要約＋全文。with_groups=1 で左カラム用メトリクスも返却）
+// GET /sessions（グループ一覧用の指標を返す）
 docsApp.openapi(
   createRoute({
     method: 'get',
@@ -186,57 +225,31 @@ docsApp.openapi(
     request: { query: sessionsQuerySchema.openapi('SessionsQuery') },
     responses: {
       200: {
-        description: 'Sessions with summary and transcript. If with_groups=1, returns { sessions, groups }',
+        description: 'Groups metrics for the selected window (and previous window deltas).',
         content: {
           'application/json': {
             schema: z
-              .union([
-                z.array(
-                  z.object({
-                    session_id: z.string(),
-                    group_id: z.string(),
-                    datetime: z.string(),
-                    utterance_count: z.number(),
-                    sentiment_value: z.number(),
-                    transcript: z.string(),
-                    transcript_diarize: z.string().nullable(),
-                  })
-                ),
+              .array(
                 z.object({
-                  sessions: z.array(
-                    z.object({
-                      session_id: z.string(),
-                      group_id: z.string(),
-                      datetime: z.string(),
-                      utterance_count: z.number(),
-                      sentiment_value: z.number(),
-                      transcript: z.string(),
-                      transcript_diarize: z.string().nullable(),
-                    })
-                  ),
-                  groups: z.array(
-                    z.object({
-                      group_id: z.string(),
-                      metrics: z.object({
-                        utterances: z.number(),
-                        miro: z.number(),
-                        sentiment_avg: z.number(),
-                      }),
-                      prev_metrics: z.object({
-                        utterances: z.number(),
-                        miro: z.number(),
-                        sentiment_avg: z.number(),
-                      }),
-                      deltas: z.object({
-                        utterances: z.number(),
-                        miro: z.number(),
-                        sentiment_avg: z.number(),
-                      }),
-                    })
-                  ),
+                  group_id: z.string(),
+                  metrics: z.object({
+                    utterances: z.number(),
+                    miro: z.number(),
+                    sentiment_avg: z.number(),
+                  }),
+                  prev_metrics: z.object({
+                    utterances: z.number(),
+                    miro: z.number(),
+                    sentiment_avg: z.number(),
+                  }),
+                  deltas: z.object({
+                    utterances: z.number(),
+                    miro: z.number(),
+                    sentiment_avg: z.number(),
+                  }),
                 })
-              ])
-              .openapi('SessionsOrWithGroupsResponse'),
+              )
+              .openapi('SessionsGroupsMetricsResponse'),
           },
         },
       },
