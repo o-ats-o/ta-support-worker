@@ -72,6 +72,14 @@ webhookRoutes.post('/session/process', zValidator('query', webhookQuerySchema), 
       createdAtIso: now,
     });
     await upsertSessionSummary(c.env.DB, { sessionId, groupId, utteranceCount, sentimentScore, updatedAtIso: now });
+    // SSE へ通知
+    try {
+      const bc = new BroadcastChannel('ta-support-events');
+      bc.postMessage({ type: 'session_processed', sessionId, groupId, at: now });
+      bc.close();
+    } catch (e) {
+      console.warn('BroadcastChannel failed:', (e as any)?.message || e);
+    }
     return c.json({ success: true, message: `Processed ${utteranceCount} utterances.` });
   } catch (e: any) {
     console.error('Database transaction failed:', e.message);
