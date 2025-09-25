@@ -178,7 +178,7 @@ docsApp.openapi(
   (c) => c.json([])
 );
 
-// GET /sessions（セッション単位の要約＋全文）
+// GET /sessions（セッション単位の要約＋全文。with_groups=1 で左カラム用メトリクスも返却）
 docsApp.openapi(
   createRoute({
     method: 'get',
@@ -186,20 +186,57 @@ docsApp.openapi(
     request: { query: sessionsQuerySchema.openapi('SessionsQuery') },
     responses: {
       200: {
-        description: 'Sessions with summary and transcript',
+        description: 'Sessions with summary and transcript. If with_groups=1, returns { sessions, groups }',
         content: {
           'application/json': {
-            schema: z.array(
-              z.object({
-                session_id: z.string(),
-                group_id: z.string(),
-                datetime: z.string(),
-                utterance_count: z.number(),
-                sentiment_value: z.number(),
-                transcript: z.string(),
-                transcript_diarize: z.string().nullable(),
-              })
-            ).openapi('SessionsResponse'),
+            schema: z
+              .union([
+                z.array(
+                  z.object({
+                    session_id: z.string(),
+                    group_id: z.string(),
+                    datetime: z.string(),
+                    utterance_count: z.number(),
+                    sentiment_value: z.number(),
+                    transcript: z.string(),
+                    transcript_diarize: z.string().nullable(),
+                  })
+                ),
+                z.object({
+                  sessions: z.array(
+                    z.object({
+                      session_id: z.string(),
+                      group_id: z.string(),
+                      datetime: z.string(),
+                      utterance_count: z.number(),
+                      sentiment_value: z.number(),
+                      transcript: z.string(),
+                      transcript_diarize: z.string().nullable(),
+                    })
+                  ),
+                  groups: z.array(
+                    z.object({
+                      group_id: z.string(),
+                      metrics: z.object({
+                        utterances: z.number(),
+                        miro: z.number(),
+                        sentiment_avg: z.number(),
+                      }),
+                      prev_metrics: z.object({
+                        utterances: z.number(),
+                        miro: z.number(),
+                        sentiment_avg: z.number(),
+                      }),
+                      deltas: z.object({
+                        utterances: z.number(),
+                        miro: z.number(),
+                        sentiment_avg: z.number(),
+                      }),
+                    })
+                  ),
+                })
+              ])
+              .openapi('SessionsOrWithGroupsResponse'),
           },
         },
       },
