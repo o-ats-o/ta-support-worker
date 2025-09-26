@@ -195,7 +195,6 @@ curl -X PUT "<uploadUrl>" -H "Content-Type: audio/flac" --data-binary @/path/to/
   - `start` 必須（ISO）例: `2025-09-19T09:00:00Z`
   - `end` 任意（未指定は start+5 分）。`(end - start) === 5分` 以外は 400
   - `limit` 任意（未指定または 0 で全件）
-  - `w_u,w_m,w_s` 任意（デフォルト 0.5/0.4/0.1）
 - 例:
 
 ```bash
