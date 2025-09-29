@@ -222,7 +222,7 @@ curl 'http://localhost:8787/api/groups/recommendations?start=2025-09-19T09:00:00
 ]
 ```
 
-8. 時間推移（5 バケット）
+9. 時間推移（5 バケット）
 
 - 役割: 選択した 5 分窓と、その直前 4 窓の合計 5 バケット（古 → 新）を返す
 - エンドポイント: `GET /api/groups/timeseries?group_ids=G1,G2&start=<ISO>&end=<ISO>`（`end` 省略時は `start+5分`）
@@ -252,7 +252,7 @@ curl 'http://localhost:8787/api/groups/recommendations?start=2025-09-19T09:00:00
 }
 ```
 
-9. リアルタイム更新（SSE）
+10. リアルタイム更新（SSE）
 
 - 役割: 最新 5 分窓の切替・新規データ到着を即時通知
 - エンドポイント: `GET /api/events?delay_ms=30000&step_ms=300000`
@@ -279,7 +279,7 @@ es.addEventListener("data_ready", (e) => {
 });
 ```
 
-10. Miro 同期・差分・最新（新規・マッピング運用）
+11. Miro 同期・差分・最新（新規・マッピング運用）
 
 - 前提: フロント（GET 側）は group_id のみを使用。クライアント（POST 側）は group_id と board_id を送信してマッピング登録。
 - 同期（差分作成・マッピング登録/更新）
