@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS session_summary (
 -- schema.sql
 DROP TABLE IF EXISTS utterances;
 DROP TABLE IF EXISTS session_summary;
+DROP TABLE IF EXISTS session_sentiment_snapshots;
 
 -- 個々の発話データを格納するテーブル
 CREATE TABLE utterances (
@@ -50,8 +51,24 @@ CREATE TABLE session_summary (
   PRIMARY KEY (session_id, group_id)
 );
 
+-- センチメントの履歴スナップショット
+CREATE TABLE session_sentiment_snapshots (
+  session_id TEXT NOT NULL,
+  group_id TEXT NOT NULL,
+  captured_at TEXT NOT NULL,
+  utterance_count INTEGER NOT NULL DEFAULT 0,
+  sentiment_score REAL NOT NULL DEFAULT 0.0,
+  PRIMARY KEY (session_id, group_id, captured_at)
+);
+
 -- 検索を高速化するためのインデックス
 CREATE INDEX idx_utterances_session_group_id ON utterances (session_id, group_id);
+
+CREATE INDEX idx_session_sentiment_snapshots_group_time
+  ON session_sentiment_snapshots (group_id, captured_at);
+
+CREATE INDEX idx_session_sentiment_snapshots_time
+  ON session_sentiment_snapshots (captured_at);
 
 -- Miro グループとボードの対応表
 CREATE TABLE IF NOT EXISTS miro_board_map (
