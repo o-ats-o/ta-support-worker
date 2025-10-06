@@ -11,7 +11,6 @@ import { sessionsRoutes } from './routes/sessions';
 import { miroRoutes } from './routes/miro';
 import { recommendRoutes } from './routes/recommend';
 import { timeseriesRoutes } from './routes/timeseries';
-import { eventsRoutes } from './routes/events';
 
 const app = new Hono<{ Bindings: AppBindings }>();
 const api = new Hono<{ Bindings: AppBindings }>();
@@ -31,7 +30,6 @@ api.route('/', utterancesRoutes);
 api.route('/', scenarioRoutes);
 api.route('/', sessionsRoutes);
 api.route('/', timeseriesRoutes);
-api.route('/', eventsRoutes);
 api.route('/', miroRoutes);
 api.route('/', recommendRoutes);
 api.route('/', docsApp);

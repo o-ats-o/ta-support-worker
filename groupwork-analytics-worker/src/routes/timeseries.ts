@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import type { AppBindings } from '../config';
 import { timeseriesQuerySchema } from '../schemas/timeseries';
+import { DATA_DELAY_MS } from '../utils/dataDelay';
 
 export const timeseriesRoutes = new Hono<{ Bindings: AppBindings }>();
 
@@ -11,6 +12,7 @@ timeseriesRoutes.get('/groups/timeseries', zValidator('query', timeseriesQuerySc
   const endMs = end ? new Date(end).getTime() : new Date(new Date(start).getTime() + 5 * 60 * 1000).getTime();
   const startMs = new Date(start).getTime();
   const window = endMs - startMs; // 5分想定
+  const anchorMs = Date.now() - DATA_DELAY_MS;
 
   // 選択窓とその直前4窓の合計5バケットを返す（古→新の順）
   const baseStart = startMs - 4 * window;
@@ -20,9 +22,18 @@ timeseriesRoutes.get('/groups/timeseries', zValidator('query', timeseriesQuerySc
     const bEnd = bStart + window;
     const fromIso = new Date(bStart).toISOString();
     const toIso = new Date(bEnd).toISOString();
-    const u = await countUtterances(c.env.DB, group_ids, fromIso, toIso);
-    const m = await sumMiroDiffs(c.env.DB, group_ids, fromIso, toIso);
-    const s = await avgSentiment(c.env.DB, group_ids, fromIso, toIso);
+    let u: Map<string, number>;
+    let m: Map<string, number>;
+    let s: Map<string, number>;
+    if (anchorMs >= bEnd) {
+      u = await countUtterances(c.env.DB, group_ids, fromIso, toIso);
+      m = await sumMiroDiffs(c.env.DB, group_ids, fromIso, toIso);
+      s = await avgSentiment(c.env.DB, group_ids, fromIso, toIso);
+    } else {
+      u = new Map();
+      m = new Map();
+      s = new Map();
+    }
     const items = group_ids.map((g) => ({
       group_id: g,
       utterances: u.get(g) || 0,

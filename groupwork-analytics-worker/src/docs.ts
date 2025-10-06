@@ -204,35 +204,6 @@ docsApp.openapi(
   (c) => c.json({ window_ms: 300000, buckets: [] })
 );
 
-// GET /events（Server-Sent Events: 最新窓/新着データの通知）
-docsApp.openapi(
-  createRoute({
-    method: 'get',
-    path: '/events',
-    request: {
-      query: z
-        .object({
-          delay_ms: z.string().optional().openapi({ example: '30000', description: 'データ確定猶予（ms）' }),
-          step_ms: z.string().optional().openapi({ example: '300000', description: 'ウィンドウ幅（ms、既定5分）' }),
-        })
-        .openapi('EventsQuery'),
-    },
-    responses: {
-      200: {
-        description:
-          'text/event-stream で配信。event: window_status / window_tick / data_ready（心拍はコメント行）。\n\n例:\n\nretry: 5000\n\nevent: window_status\n\ndata: {"now":"...","latest_window":{"start":"...","end":"..."}}\n\n',
-        content: {
-          'text/event-stream': {
-            schema: z.string().openapi('SSEStream'),
-          },
-        },
-      },
-    },
-  }),
-  // ダミー（ストリームは実装側で生成）
-  (c) => c.text('')
-);
-
 // GET /miro/items（group_id を board_id に解決して最新状態を返す）
 docsApp.openapi(
   createRoute({

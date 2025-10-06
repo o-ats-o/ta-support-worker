@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { sessionsQuerySchema } from '../schemas/sessions';
 import type { AppBindings } from '../config';
+import { DATA_DELAY_MS } from '../utils/dataDelay';
 
 export const sessionsRoutes = new Hono<{ Bindings: AppBindings }>();
 
@@ -17,9 +18,13 @@ sessionsRoutes.get('/sessions', zValidator('query', sessionsQuerySchema), async 
 // 画面左側「グループ一覧」向けメトリクスを算出
 async function buildGroupMetrics(db: D1Database, params: { start?: string; end?: string }) {
   const { start, end } = params;
-  // ウィンドウ未指定時は「直近5分」を採用
-  const endMs = end ? new Date(end).getTime() : Date.now();
-  const startMs = start ? new Date(start).getTime() : endMs - 5 * 60 * 1000;
+  const anchorMs = Date.now() - DATA_DELAY_MS;
+  const requestedEndMs = end ? new Date(end).getTime() : anchorMs;
+  const startCandidateMs = start ? new Date(start).getTime() : requestedEndMs - 5 * 60 * 1000;
+  const startMs = startCandidateMs;
+  const endMs = requestedEndMs;
+  const windowReady = anchorMs >= endMs;
+  const prevWindowReady = anchorMs >= startMs;
   const windowStartIso = new Date(startMs).toISOString();
   const windowEndIso = new Date(endMs).toISOString();
   const prevStartIso = new Date(startMs - (endMs - startMs)).toISOString();
@@ -29,79 +34,93 @@ async function buildGroupMetrics(db: D1Database, params: { start?: string; end?:
   const baseGroups = new Set<string>();
   const { results: mapRows } = await db.prepare('SELECT group_id FROM miro_board_map').all<{ group_id: string }>();
   for (const r of mapRows ?? []) baseGroups.add(r.group_id);
-  const { results: uGroups } = await db
-    .prepare('SELECT DISTINCT group_id FROM utterances WHERE created_at > ? AND created_at <= ?')
-    .bind(windowStartIso, windowEndIso)
-    .all<{ group_id: string }>();
-  for (const r of uGroups ?? []) baseGroups.add(r.group_id);
-  const { results: sGroups } = await db
-    .prepare('SELECT DISTINCT group_id FROM session_summary WHERE last_updated_at > ? AND last_updated_at <= ?')
-    .bind(windowStartIso, windowEndIso)
-    .all<{ group_id: string }>();
-  for (const r of sGroups ?? []) baseGroups.add(r.group_id);
+  if (windowReady) {
+    const { results: uGroups } = await db
+      .prepare('SELECT DISTINCT group_id FROM utterances WHERE created_at > ? AND created_at <= ?')
+      .bind(windowStartIso, windowEndIso)
+      .all<{ group_id: string }>();
+    for (const r of uGroups ?? []) baseGroups.add(r.group_id);
+    const { results: sGroups } = await db
+      .prepare('SELECT DISTINCT group_id FROM session_summary WHERE last_updated_at > ? AND last_updated_at <= ?')
+      .bind(windowStartIso, windowEndIso)
+      .all<{ group_id: string }>();
+    for (const r of sGroups ?? []) baseGroups.add(r.group_id);
+  }
   const groupIds = Array.from(baseGroups);
   if (groupIds.length === 0) return [] as any[];
 
   // 発話件数（現窓/前窓）
   const utterMap = new Map<string, number>();
-  const { results: uRows } = await db
-    .prepare('SELECT group_id, COUNT(*) as cnt FROM utterances WHERE created_at > ? AND created_at <= ? GROUP BY group_id')
-    .bind(windowStartIso, windowEndIso)
-    .all<{ group_id: string; cnt: number }>();
-  for (const r of uRows ?? []) utterMap.set(r.group_id, Number(r.cnt) || 0);
+  if (windowReady) {
+    const { results: uRows } = await db
+      .prepare('SELECT group_id, COUNT(*) as cnt FROM utterances WHERE created_at > ? AND created_at <= ? GROUP BY group_id')
+      .bind(windowStartIso, windowEndIso)
+      .all<{ group_id: string; cnt: number }>();
+    for (const r of uRows ?? []) utterMap.set(r.group_id, Number(r.cnt) || 0);
+  }
 
   const prevUtterMap = new Map<string, number>();
-  const { results: puRows } = await db
-    .prepare('SELECT group_id, COUNT(*) as cnt FROM utterances WHERE created_at > ? AND created_at <= ? GROUP BY group_id')
-    .bind(prevStartIso, prevEndIso)
-    .all<{ group_id: string; cnt: number }>();
-  for (const r of puRows ?? []) prevUtterMap.set(r.group_id, Number(r.cnt) || 0);
+  if (prevWindowReady) {
+    const { results: puRows } = await db
+      .prepare('SELECT group_id, COUNT(*) as cnt FROM utterances WHERE created_at > ? AND created_at <= ? GROUP BY group_id')
+      .bind(prevStartIso, prevEndIso)
+      .all<{ group_id: string; cnt: number }>();
+    for (const r of puRows ?? []) prevUtterMap.set(r.group_id, Number(r.cnt) || 0);
+  }
 
   // Miro作業量（JSON配列長の合計）
   const boardToGroup = new Map<string, string>();
   const { results: mapAll } = await db.prepare('SELECT group_id, board_id FROM miro_board_map').all<{ group_id: string; board_id: string }>();
   for (const r of mapAll ?? []) boardToGroup.set(r.board_id, r.group_id);
   const miroMap = new Map<string, number>();
-  const { results: dRows } = await db
-    .prepare('SELECT board_id, added, updated, deleted FROM miro_diffs WHERE diff_at > ? AND diff_at <= ?')
-    .bind(windowStartIso, windowEndIso)
-    .all<{ board_id: string; added: string; updated: string; deleted: string }>();
-  for (const r of dRows ?? []) {
-    const g = boardToGroup.get(r.board_id);
-    if (!g) continue;
-    const add = safeLen(r.added);
-    const upd = safeLen(r.updated);
-    const del = safeLen(r.deleted);
-    miroMap.set(g, (miroMap.get(g) || 0) + add + upd + del);
+  if (windowReady) {
+    const { results: dRows } = await db
+      .prepare('SELECT board_id, added, updated, deleted FROM miro_diffs WHERE diff_at > ? AND diff_at <= ?')
+      .bind(windowStartIso, windowEndIso)
+      .all<{ board_id: string; added: string; updated: string; deleted: string }>();
+    for (const r of dRows ?? []) {
+      const g = boardToGroup.get(r.board_id);
+      if (!g) continue;
+      const add = safeLen(r.added);
+      const upd = safeLen(r.updated);
+      const del = safeLen(r.deleted);
+      miroMap.set(g, (miroMap.get(g) || 0) + add + upd + del);
+    }
   }
   const prevMiroMap = new Map<string, number>();
-  const { results: pdRows } = await db
-    .prepare('SELECT board_id, added, updated, deleted FROM miro_diffs WHERE diff_at > ? AND diff_at <= ?')
-    .bind(prevStartIso, prevEndIso)
-    .all<{ board_id: string; added: string; updated: string; deleted: string }>();
-  for (const r of pdRows ?? []) {
-    const g = boardToGroup.get(r.board_id);
-    if (!g) continue;
-    const add = safeLen(r.added);
-    const upd = safeLen(r.updated);
-    const del = safeLen(r.deleted);
-    prevMiroMap.set(g, (prevMiroMap.get(g) || 0) + add + upd + del);
+  if (prevWindowReady) {
+    const { results: pdRows } = await db
+      .prepare('SELECT board_id, added, updated, deleted FROM miro_diffs WHERE diff_at > ? AND diff_at <= ?')
+      .bind(prevStartIso, prevEndIso)
+      .all<{ board_id: string; added: string; updated: string; deleted: string }>();
+    for (const r of pdRows ?? []) {
+      const g = boardToGroup.get(r.board_id);
+      if (!g) continue;
+      const add = safeLen(r.added);
+      const upd = safeLen(r.updated);
+      const del = safeLen(r.deleted);
+      prevMiroMap.set(g, (prevMiroMap.get(g) || 0) + add + upd + del);
+    }
   }
 
   // 感情（平均）
   const sentiMap = new Map<string, number>();
-  const { results: sRows } = await db
-    .prepare('SELECT group_id, AVG(sentiment_score) as avg_s FROM session_summary WHERE last_updated_at > ? AND last_updated_at <= ? GROUP BY group_id')
-    .bind(windowStartIso, windowEndIso)
-    .all<{ group_id: string; avg_s: number }>();
-  for (const r of sRows ?? []) sentiMap.set(r.group_id, Number(r.avg_s) || 0);
+  if (windowReady) {
+    const { results: sRows } = await db
+      .prepare('SELECT group_id, AVG(sentiment_score) as avg_s FROM session_summary WHERE last_updated_at > ? AND last_updated_at <= ? GROUP BY group_id')
+      .bind(windowStartIso, windowEndIso)
+      .all<{ group_id: string; avg_s: number }>();
+    for (const r of sRows ?? []) sentiMap.set(r.group_id, Number(r.avg_s) || 0);
+  }
 
   const prevSentiMap = new Map<string, number>();
-  const { results: psRows } = await db
-    .prepare('SELECT group_id, AVG(sentiment_score) as avg_s FROM session_summary WHERE last_updated_at > ? AND last_updated_at <= ? GROUP BY group_id')
-    .bind(prevStartIso, prevEndIso)
-    .all<{ group_id: string; avg_s: number }>();
-  for (const r of psRows ?? []) prevSentiMap.set(r.group_id, Number(r.avg_s) || 0);
+  if (prevWindowReady) {
+    const { results: psRows } = await db
+      .prepare('SELECT group_id, AVG(sentiment_score) as avg_s FROM session_summary WHERE last_updated_at > ? AND last_updated_at <= ? GROUP BY group_id')
+      .bind(prevStartIso, prevEndIso)
+      .all<{ group_id: string; avg_s: number }>();
+    for (const r of psRows ?? []) prevSentiMap.set(r.group_id, Number(r.avg_s) || 0);
+  }
 
   // 形に整形
   const list = groupIds.map((g) => {
