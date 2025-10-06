@@ -6,6 +6,7 @@ import { listQuerySchema } from './schemas/utterances';
 import { sessionsQuerySchema } from './schemas/sessions';
 import { recommendQuerySchema } from './schemas/recommend';
 import { timeseriesQuerySchema } from './schemas/timeseries';
+import { sentimentHistoryQuerySchema } from './schemas/sentimentSnapshots';
 import { miroDiffsQuerySchema, miroItemsQuerySchema, miroSyncBodySchema } from './schemas/miro';
 
 export const docsApp = new OpenAPIHono();
@@ -256,6 +257,38 @@ docsApp.openapi(
     },
   }),
   (c) => c.json([])
+);
+
+// GET /sessions/sentiment-history（グループ/セッション単位でスナップショット履歴を返す）
+docsApp.openapi(
+  createRoute({
+    method: 'get',
+    path: '/sessions/sentiment-history',
+    request: { query: sentimentHistoryQuerySchema.openapi('SentimentHistoryQuery') },
+    responses: {
+      200: {
+        description: 'Snapshot history ordered newest-first for the specified group (and optional session/time filters).',
+        content: {
+          'application/json': {
+            schema: z
+              .object({
+                items: z.array(
+                  z.object({
+                    session_id: z.string(),
+                    group_id: z.string(),
+                    captured_at: z.string(),
+                    utterance_count: z.number(),
+                    sentiment_score: z.number(),
+                  })
+                ),
+              })
+              .openapi('SentimentHistoryResponse'),
+          },
+        },
+      },
+    },
+  }),
+  (c) => c.json({ items: [] })
 );
 
 // GET /groups/recommendations（固定5分ウィンドウの推薦）
