@@ -30,7 +30,7 @@ export async function listUtterances(db: D1Database, params: {
   const bindings: (string | number)[] = [];
   if (groupId) { conditions.push('group_id =?'); bindings.push(groupId); }
   if (start) { conditions.push('created_at >=?'); bindings.push(start); }
-  if (end) { conditions.push('created_at <=?'); bindings.push(end); }
+  if (end) { conditions.push('created_at <?'); bindings.push(end); }
   if (conditions.length > 0) { query += ' WHERE ' + conditions.join(' AND '); }
   query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
   bindings.push(limit, offset);
