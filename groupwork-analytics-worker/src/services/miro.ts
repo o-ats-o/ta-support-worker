@@ -8,11 +8,21 @@ export type MiroItem = {
   [key: string]: JsonValue;
 };
 
+export type MiroUpdatedDiff = {
+  id: string;
+  type: string;
+  before: MiroItem | null;
+  after: MiroItem | null;
+  beforeText?: string;
+  afterText?: string;
+  changedPaths: string[];
+};
+
 export type MiroDiff = {
   boardId: string;
   diffAt: string; // ISO8601
   added: MiroItem[];
-  updated: MiroItem[];
+  updated: MiroUpdatedDiff[];
   deleted: { id: string; type?: string }[];
 };
 
@@ -95,17 +105,34 @@ export async function syncBoardAndDiff(env: AppBindings, boardId: string, opts?:
 
   // 直近の状態を取得
   const prevRows = await env.DB.prepare(
-    'SELECT item_id, type, hash, deleted_at, first_seen_at FROM miro_items WHERE board_id = ?'
+    'SELECT item_id, type, hash, data, deleted_at, first_seen_at FROM miro_items WHERE board_id = ?'
   )
     .bind(boardId)
-    .all<{ item_id: string; type: string; hash: string; deleted_at: string | null; first_seen_at: string }>();
+    .all<{
+      item_id: string;
+      type: string;
+      hash: string;
+      data: string;
+      deleted_at: string | null;
+      first_seen_at: string;
+    }>();
 
-  const prevMap = new Map<string, { type: string; hash: string; deleted_at: string | null; first_seen_at: string }>();
-  for (const r of prevRows.results ?? []) prevMap.set(r.item_id, { type: r.type, hash: r.hash, deleted_at: r.deleted_at, first_seen_at: r.first_seen_at });
+  const prevMap = new Map<
+    string,
+    { type: string; hash: string; data: string; deleted_at: string | null; first_seen_at: string }
+  >();
+  for (const r of prevRows.results ?? [])
+    prevMap.set(r.item_id, {
+      type: r.type,
+      hash: r.hash,
+      data: r.data,
+      deleted_at: r.deleted_at,
+      first_seen_at: r.first_seen_at,
+    });
 
   const seenIds = new Set<string>();
   const added: MiroItem[] = [];
-  const updated: MiroItem[] = [];
+  const updated: MiroUpdatedDiff[] = [];
   const insertStatements: PreparedStatement[] = [];
   const updateStatements: PreparedStatement[] = [];
 
@@ -127,7 +154,18 @@ export async function syncBoardAndDiff(env: AppBindings, boardId: string, opts?:
     }
     const wasDeleted = prev.deleted_at !== null;
     const isChanged = prev.hash !== hash || wasDeleted;
-    if (isChanged) updated.push(item);
+    if (isChanged) {
+      const prevItem = safeJsonParse<MiroItem | null>(prev.data, null);
+      updated.push({
+        id: itemId,
+        type: String(item.type ?? ''),
+        before: prevItem,
+        after: item,
+        beforeText: extractMiroItemText(prevItem),
+        afterText: extractMiroItemText(item),
+        changedPaths: computeChangedPaths(prevItem, item),
+      });
+    }
     updateStatements.push(
       env.DB
         .prepare('UPDATE miro_items SET type = ?, hash = ?, data = ?, last_seen_at = ?, deleted_at = NULL WHERE board_id = ? AND item_id = ?')
@@ -203,7 +241,7 @@ export async function listDiffs(env: AppBindings, params: {
     boardId: r.board_id,
     diffAt: r.diff_at,
     added: safeJsonParse(r.added, []),
-    updated: safeJsonParse(r.updated, []),
+    updated: normalizeUpdatedEntries(safeJsonParse(r.updated, [])),
     deleted: safeJsonParse(r.deleted, []),
   }));
 }
@@ -246,6 +284,156 @@ function safeJsonParse<T>(text: string, fallback: T): T {
   } catch {
     return fallback;
   }
+}
+
+function normalizeUpdatedEntries(entries: any[]): MiroUpdatedDiff[] {
+  if (!Array.isArray(entries)) return [];
+  const normalized: MiroUpdatedDiff[] = [];
+  for (const entry of entries) {
+    const value = normalizeUpdatedEntry(entry);
+    if (value) normalized.push(value);
+  }
+  return normalized;
+}
+
+function normalizeUpdatedEntry(entry: any): MiroUpdatedDiff | null {
+  if (!entry || typeof entry !== 'object') return null;
+  const candidateBefore = 'before' in entry ? (entry.before as MiroItem | null) : null;
+  const candidateAfter = 'after' in entry ? (entry.after as MiroItem | null) : null;
+  const hasRichShape = candidateBefore !== null || candidateAfter !== null || 'beforeText' in entry || 'afterText' in entry;
+  if (hasRichShape) {
+    const before = candidateBefore && typeof candidateBefore === 'object' ? candidateBefore : null;
+    const after = candidateAfter && typeof candidateAfter === 'object' ? candidateAfter : null;
+    const id = String(entry.id ?? after?.id ?? before?.id ?? '');
+    const type = String(entry.type ?? after?.type ?? before?.type ?? '');
+    if (!id) return null;
+    return {
+      id,
+      type,
+      before,
+      after,
+      beforeText:
+        typeof entry.beforeText === 'string' && entry.beforeText.trim().length > 0
+          ? entry.beforeText
+          : extractMiroItemText(before),
+      afterText:
+        typeof entry.afterText === 'string' && entry.afterText.trim().length > 0
+          ? entry.afterText
+          : extractMiroItemText(after),
+      changedPaths: Array.isArray(entry.changedPaths)
+        ? entry.changedPaths.map((p: any) => String(p)).filter((p: string) => p.length > 0)
+        : computeChangedPaths(before, after),
+    };
+  }
+
+  const after = entry as MiroItem;
+  const id = String((after as any)?.id ?? '');
+  if (!id) return null;
+  return {
+    id,
+    type: String((after as any)?.type ?? ''),
+    before: null,
+    after,
+    beforeText: undefined,
+    afterText: extractMiroItemText(after),
+    changedPaths: [],
+  };
+}
+
+function computeChangedPaths(before: MiroItem | null, after: MiroItem | null): string[] {
+  const trackedPaths: string[][] = [
+    ['data', 'plainText'],
+    ['data', 'text'],
+    ['data', 'content'],
+    ['data', 'title'],
+    ['plainText'],
+    ['text'],
+    ['title'],
+    ['name'],
+  ];
+  const changed = new Set<string>();
+  for (const path of trackedPaths) {
+    const beforeVal = getNestedValue(before, path);
+    const afterVal = getNestedValue(after, path);
+    if (!valuesEqual(beforeVal, afterVal)) changed.add(path.join('.'));
+  }
+  return Array.from(changed);
+}
+
+function getNestedValue(source: any, path: string[]): any {
+  if (!source || typeof source !== 'object') return undefined;
+  let current: any = source;
+  for (const key of path) {
+    if (!current || typeof current !== 'object') return undefined;
+    current = current[key];
+  }
+  return current;
+}
+
+function valuesEqual(a: any, b: any): boolean {
+  if (a === b) return true;
+  const normalizedA = normalizeComparableValue(a);
+  const normalizedB = normalizeComparableValue(b);
+  return normalizedA === normalizedB;
+}
+
+function normalizeComparableValue(value: any): string {
+  if (value === undefined) return '__undefined__';
+  if (value === null) return '__null__';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return Object.prototype.toString.call(value);
+  }
+}
+
+function extractMiroItemText(item: MiroItem | null | undefined): string | undefined {
+  if (!item || typeof item !== 'object') return undefined;
+  const candidates: string[] = [];
+  const pushCandidate = (value: unknown) => {
+    if (typeof value === 'string') candidates.push(value);
+  };
+  pushCandidate((item as any).plainText);
+  pushCandidate((item as any).text);
+  pushCandidate((item as any).title);
+  pushCandidate((item as any).name);
+  const data = (item as any).data;
+  if (data && typeof data === 'object') {
+    pushCandidate((data as any).plainText);
+    pushCandidate((data as any).text);
+    pushCandidate((data as any).title);
+    pushCandidate((data as any).content);
+  }
+  for (const raw of candidates) {
+    const decoded = decodeHtmlEntities(raw);
+    const stripped = stripHtml(decoded).trim();
+    if (stripped.length > 0) return stripped;
+  }
+  return undefined;
+}
+
+function stripHtml(text: string): string {
+  return text
+    .replace(/<br\s*\/?>(\r?\n)?/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function decodeHtmlEntities(text: string): string {
+  return text
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&#(\d+);/g, (_, code) => {
+      const num = Number(code);
+      return Number.isFinite(num) ? String.fromCharCode(num) : _;
+    });
 }
 
 async function serializeAndHashItems(items: MiroItem[]) {
