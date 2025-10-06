@@ -31,7 +31,7 @@ recommendRoutes.get('/groups/recommendations', zValidator('query', recommendQuer
   const windowStartIso = new Date(startMs).toISOString();
   const windowEndIso = new Date(endMs).toISOString();
 
-  // ベースとなるグループ集合（miro_board_map + utterances + session_summary から抽出）
+  // ベースとなるグループ集合（miro_board_map + utterances + session_sentiment_snapshots から抽出）
   const baseGroups = new Set<string>();
   const { results: mapRows } = await c.env.DB.prepare('SELECT group_id FROM miro_board_map').all<{ group_id: string }>();
   for (const r of mapRows ?? []) baseGroups.add(r.group_id);
@@ -42,7 +42,7 @@ recommendRoutes.get('/groups/recommendations', zValidator('query', recommendQuer
       .all<{ group_id: string }>();
     for (const r of uGroups ?? []) baseGroups.add(r.group_id);
     const { results: sGroups } = await c.env.DB
-      .prepare('SELECT DISTINCT group_id FROM session_summary WHERE last_updated_at > ? AND last_updated_at <= ?')
+      .prepare('SELECT DISTINCT group_id FROM session_sentiment_snapshots WHERE captured_at > ? AND captured_at <= ?')
       .bind(windowStartIso, windowEndIso)
       .all<{ group_id: string }>();
     for (const r of sGroups ?? []) baseGroups.add(r.group_id);
@@ -85,7 +85,7 @@ recommendRoutes.get('/groups/recommendations', zValidator('query', recommendQuer
   const sentiMap = new Map<string, number>();
   if (windowReady) {
     const { results: sRows } = await c.env.DB
-      .prepare('SELECT group_id, AVG(sentiment_score) as avg_s FROM session_summary WHERE last_updated_at > ? AND last_updated_at <= ? GROUP BY group_id')
+      .prepare('SELECT group_id, AVG(sentiment_score) as avg_s FROM session_sentiment_snapshots WHERE captured_at > ? AND captured_at <= ? GROUP BY group_id')
       .bind(windowStartIso, windowEndIso)
       .all<{ group_id: string; avg_s: number }>();
     for (const r of sRows ?? []) sentiMap.set(r.group_id, Number(r.avg_s) || 0);
@@ -122,7 +122,7 @@ recommendRoutes.get('/groups/recommendations', zValidator('query', recommendQuer
   const prevSentiMap = new Map<string, number>();
   if (prevWindowReady) {
     const { results: psRows } = await c.env.DB
-      .prepare('SELECT group_id, AVG(sentiment_score) as avg_s FROM session_summary WHERE last_updated_at > ? AND last_updated_at <= ? GROUP BY group_id')
+      .prepare('SELECT group_id, AVG(sentiment_score) as avg_s FROM session_sentiment_snapshots WHERE captured_at > ? AND captured_at <= ? GROUP BY group_id')
       .bind(prevStartIso, prevEndIso)
       .all<{ group_id: string; avg_s: number }>();
     for (const r of psRows ?? []) prevSentiMap.set(r.group_id, Number(r.avg_s) || 0);
