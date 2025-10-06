@@ -82,7 +82,7 @@ async function sumMiroDiffs(db: D1Database, groupIds: string[], from: string, to
 async function avgSentiment(db: D1Database, groupIds: string[], from: string, to: string) {
   const map = new Map<string, number>();
   const { results } = await db
-    .prepare(`SELECT group_id, AVG(sentiment_score) as avg_s FROM session_summary WHERE last_updated_at > ? AND last_updated_at <= ? AND group_id IN (${groupIds.map(() => '?').join(',')}) GROUP BY group_id`)
+    .prepare(`SELECT group_id, AVG(sentiment_score) as avg_s FROM session_sentiment_snapshots WHERE captured_at > ? AND captured_at <= ? AND group_id IN (${groupIds.map(() => '?').join(',')}) GROUP BY group_id`)
     .bind(from, to, ...groupIds)
     .all<{ group_id: string; avg_s: number }>();
   for (const r of results ?? []) map.set(r.group_id, Number(r.avg_s) || 0);
