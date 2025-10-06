@@ -4,6 +4,7 @@ import { webhookQuerySchema, runpodOutputSchema } from '../schemas/process';
 import { analyzeSentiment } from '../services/nlp';
 import { insertUtterances } from '../db/utterances';
 import { upsertSessionSummary } from '../db/sessionSummary';
+import { insertSessionSentimentSnapshot } from '../db/sessionSentimentSnapshots';
 import type { AppBindings } from '../config';
 
 export const webhookRoutes = new Hono<{ Bindings: AppBindings }>();
@@ -72,6 +73,13 @@ webhookRoutes.post('/session/process', zValidator('query', webhookQuerySchema), 
       createdAtIso: now,
     });
     await upsertSessionSummary(c.env.DB, { sessionId, groupId, utteranceCount, sentimentScore, updatedAtIso: now });
+    await insertSessionSentimentSnapshot(c.env.DB, {
+      sessionId,
+      groupId,
+      capturedAtIso: now,
+      utteranceCount,
+      sentimentScore,
+    });
     // SSE へ通知
     try {
       const bc = new BroadcastChannel('ta-support-events');
