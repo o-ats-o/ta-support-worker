@@ -6,7 +6,7 @@ Cloudflare Workers 上で動作する音声アップロード・文字起こし�
 
 - 音声アップロード用の署名付き URL を発行（R2）
 - RunPod に文字起こしジョブを依頼（Webhook URL を付与）
-- Webhook 受信で発話を保存し、Google NLP で感情スコアを計算して集計（D1）
+- Webhook 受信で発話を保存し、Google NLP で感情スコアを計算してサマリ（`session_summary`）とスナップショット履歴（`session_sentiment_snapshots`）を更新（D1）
 - OpenAI API で指導シナリオ生成
 - OpenAPI（Zod）→ Swagger UI で /docs 提供
 - Miro 連携（1 グループ=1 ボード運用想定。ただしクライアント POST でマッピング）：同期・差分保存・差分参照 API
@@ -66,6 +66,27 @@ npm install
 ```bash
 npx wrangler d1 execute transcription-db --local \
   --file=./schema.sql --config ./wrangler.toml
+```
+
+> **NOTE:** `schema.sql` は `DROP TABLE` を含むため既存データを初期化します。既存環境で新しい `session_sentiment_snapshots` テーブルだけ追加したい場合は、以下のコマンドを個別に実行してください。
+
+```bash
+npx wrangler d1 execute transcription-db --local --config ./wrangler.toml --command '
+  CREATE TABLE IF NOT EXISTS session_sentiment_snapshots (
+    session_id TEXT NOT NULL,
+    group_id TEXT NOT NULL,
+    captured_at TEXT NOT NULL,
+    utterance_count INTEGER NOT NULL DEFAULT 0,
+    sentiment_score REAL NOT NULL DEFAULT 0.0,
+    PRIMARY KEY (session_id, group_id, captured_at)
+  );
+'
+npx wrangler d1 execute transcription-db --local --config ./wrangler.toml --command '
+  CREATE INDEX IF NOT EXISTS idx_session_sentiment_snapshots_group_time ON session_sentiment_snapshots (group_id, captured_at);
+'
+npx wrangler d1 execute transcription-db --local --config ./wrangler.toml --command '
+  CREATE INDEX IF NOT EXISTS idx_session_sentiment_snapshots_time ON session_sentiment_snapshots (captured_at);
+'
 ```
 
 3. ローカル環境変数（.dev.vars）
@@ -153,7 +174,7 @@ curl -X PUT "<uploadUrl>" -H "Content-Type: audio/flac" --data-binary @/path/to/
 { "output": { "segments": [{ "text": "こんにちは" }, { "text": "よろしく" }] } }
 ```
 
-- 期待: D1 の `utterances` へ挿入、`session_summary` 更新、Google NLP で感情スコア反映
+- 期待: D1 の `utterances` へ挿入、`session_summary` と `session_sentiment_snapshots` 更新、Google NLP で感情スコア反映
 
 5. 保存データの取得
 
@@ -167,7 +188,7 @@ curl -X PUT "<uploadUrl>" -H "Content-Type: audio/flac" --data-binary @/path/to/
 7. グループ一覧
 
 - GET `/api/sessions?start_time=<ISO>&end_time=<ISO>`
-- 役割: 左カラムのグループ一覧用メトリクスを返す（指定窓と直前窓の比較）
+- 役割: 左カラムのグループ一覧用メトリクスを返す（指定窓と直前窓の比較）。発話は `utterances`、感情は `session_sentiment_snapshots`（指定窓内の平均）から算出。
 - 返却（配列、1 要素=1 グループ）:
   - `group_id`
   - `metrics` { `utterances`, `miro`, `sentiment_avg` }
@@ -189,7 +210,7 @@ curl -X PUT "<uploadUrl>" -H "Content-Type: audio/flac" --data-binary @/path/to/
 
 8. グループ推薦（固定 5 分ウィンドウ）
 
-- 役割: 指定した 5 分区間で各グループの発話件数・Miro 作業量・平均感情を集計し、Z-score 標準化した 3 指標の平均（低いほど優先）で返す
+- 役割: 指定した 5 分区間で各グループの発話件数・Miro 作業量・平均感情（`session_sentiment_snapshots`）を集計し、Z-score 標準化した 3 指標の平均（低いほど優先）で返す
 - エンドポイント: `GET /api/groups/recommendations`
 - クエリ:
   - `start` 必須（ISO）例: `2025-09-19T09:00:00Z`
@@ -224,7 +245,7 @@ curl 'http://localhost:8787/api/groups/recommendations?start=2025-09-19T09:00:00
 
 9. 時間推移（5 バケット）
 
-- 役割: 選択した 5 分窓と、その直前 4 窓の合計 5 バケット（古 → 新）を返す
+- 役割: 選択した 5 分窓と、その直前 4 窓の合計 5 バケット（古 → 新）を返す。各バケットの感情は `session_sentiment_snapshots` の平均。
 - エンドポイント: `GET /api/groups/timeseries?group_ids=G1,G2&start=<ISO>&end=<ISO>`（`end` 省略時は `start+5分`）
 - 返却:
 
@@ -252,7 +273,35 @@ curl 'http://localhost:8787/api/groups/recommendations?start=2025-09-19T09:00:00
 }
 ```
 
-10. Miro 同期・差分・最新（新規・マッピング運用）
+10. 感情スナップショット履歴の取得
+
+- エンドポイント: `GET /api/sessions/sentiment-history`
+- クエリ: `group_id`（必須）, `session_id`, `start`, `end`, `limit` (1-500), `offset`
+- 役割: Webhook 処理ごとに蓄積される `session_sentiment_snapshots` を直接参照し、時間逆順で履歴を返す（ダッシュボードの履歴/推移タブなどで利用）。
+
+例:
+
+```bash
+curl 'http://localhost:8787/api/sessions/sentiment-history?group_id=GroupA&limit=20'
+```
+
+レスポンス例:
+
+```json
+{
+  "items": [
+    {
+      "session_id": "s1",
+      "group_id": "GroupA",
+      "captured_at": "2025-10-06T03:01:10.715Z",
+      "utterance_count": 24,
+      "sentiment_score": -0.12
+    }
+  ]
+}
+```
+
+11. Miro 同期・差分・最新（新規・マッピング運用）
 
 - 前提: フロント（GET 側）は group_id のみを使用。クライアント（POST 側）は group_id と board_id を送信してマッピング登録。
 - 同期（差分作成・マッピング登録/更新）
