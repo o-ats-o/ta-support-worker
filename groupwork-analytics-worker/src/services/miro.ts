@@ -17,6 +17,7 @@ export type MiroDiff = {
 };
 
 const MIRO_API_BASE = 'https://api.miro.com/v2';
+type PreparedStatement = ReturnType<AppBindings['DB']['prepare']>;
 
 async function sha256(value: string): Promise<string> {
   const data = new TextEncoder().encode(value);
@@ -90,6 +91,7 @@ export async function syncBoardAndDiff(env: AppBindings, boardId: string, opts?:
   const now = new Date().toISOString();
   const token = env.MIRO_TOKEN;
   const items = await fetchBoardItems({ token, boardId, types });
+  const processedItems = await serializeAndHashItems(items);
 
   // 直近の状態を取得
   const prevRows = await env.DB.prepare(
@@ -104,45 +106,58 @@ export async function syncBoardAndDiff(env: AppBindings, boardId: string, opts?:
   const seenIds = new Set<string>();
   const added: MiroItem[] = [];
   const updated: MiroItem[] = [];
+  const insertStatements: PreparedStatement[] = [];
+  const updateStatements: PreparedStatement[] = [];
 
-  for (const it of items) {
-    const itemId = it.id;
+  for (const { item, serialized, hash } of processedItems) {
+    const itemId = item.id;
     if (!itemId) continue;
     seenIds.add(itemId);
-    const serialized = JSON.stringify(it);
-    const hash = await sha256(serialized);
     const prev = prevMap.get(itemId);
     if (!prev) {
-      // 新規
-      added.push(it);
-      await env.DB.prepare(
-        'INSERT INTO miro_items (board_id, item_id, type, hash, data, first_seen_at, last_seen_at, deleted_at) VALUES (?, ?, ?, ?, ?, ?, ?, NULL)'
-      )
-        .bind(boardId, itemId, String(it.type ?? ''), hash, serialized, now, now)
-        .run();
-    } else {
-      // 既存
-      const isChanged = prev.hash !== hash || prev.deleted_at !== null;
-      if (isChanged) updated.push(it);
-      await env.DB.prepare(
-        'UPDATE miro_items SET type = ?, hash = ?, data = ?, last_seen_at = ?, deleted_at = NULL WHERE board_id = ? AND item_id = ?'
-      )
-        .bind(String(it.type ?? ''), hash, serialized, now, boardId, itemId)
-        .run();
+      added.push(item);
+      insertStatements.push(
+        env.DB
+          .prepare(
+            'INSERT INTO miro_items (board_id, item_id, type, hash, data, first_seen_at, last_seen_at, deleted_at) VALUES (?, ?, ?, ?, ?, ?, ?, NULL)'
+          )
+          .bind(boardId, itemId, String(item.type ?? ''), hash, serialized, now, now)
+      );
+      continue;
     }
+    const wasDeleted = prev.deleted_at !== null;
+    const isChanged = prev.hash !== hash || wasDeleted;
+    if (isChanged) updated.push(item);
+    updateStatements.push(
+      env.DB
+        .prepare('UPDATE miro_items SET type = ?, hash = ?, data = ?, last_seen_at = ?, deleted_at = NULL WHERE board_id = ? AND item_id = ?')
+        .bind(String(item.type ?? ''), hash, serialized, now, boardId, itemId)
+    );
+  }
+
+  if (insertStatements.length > 0) {
+    await executeBatchStatements(env.DB, insertStatements);
+  }
+  if (updateStatements.length > 0) {
+    await executeBatchStatements(env.DB, updateStatements);
   }
 
   // 削除検出（今回見つからなかったアイテム）
   const deleted: { id: string; type?: string }[] = [];
+  const deleteStatements: PreparedStatement[] = [];
   for (const [prevId, prev] of prevMap.entries()) {
     if (!seenIds.has(prevId) && prev.deleted_at === null) {
       deleted.push({ id: prevId, type: prev.type });
-      await env.DB.prepare(
-        'UPDATE miro_items SET deleted_at = ?, last_seen_at = ? WHERE board_id = ? AND item_id = ?'
-      )
-        .bind(now, now, boardId, prevId)
-        .run();
+      deleteStatements.push(
+        env.DB
+          .prepare('UPDATE miro_items SET deleted_at = ?, last_seen_at = ? WHERE board_id = ? AND item_id = ?')
+          .bind(now, now, boardId, prevId)
+      );
     }
+  }
+
+  if (deleteStatements.length > 0) {
+    await executeBatchStatements(env.DB, deleteStatements);
   }
 
   // 差分を記録
@@ -230,6 +245,30 @@ function safeJsonParse<T>(text: string, fallback: T): T {
     return JSON.parse(text);
   } catch {
     return fallback;
+  }
+}
+
+async function serializeAndHashItems(items: MiroItem[]) {
+  const chunkSize = 32;
+  const results: { item: MiroItem; serialized: string; hash: string }[] = [];
+  for (let i = 0; i < items.length; i += chunkSize) {
+    const chunk = items.slice(i, i + chunkSize);
+    const hashedChunk = await Promise.all(
+      chunk.map(async (item) => {
+        const serialized = JSON.stringify(item);
+        const hash = await sha256(serialized);
+        return { item, serialized, hash };
+      })
+    );
+    results.push(...hashedChunk);
+  }
+  return results;
+}
+
+async function executeBatchStatements(db: AppBindings['DB'], statements: PreparedStatement[], chunkSize = 40) {
+  for (let i = 0; i < statements.length; i += chunkSize) {
+    const chunk = statements.slice(i, i + chunkSize);
+    await db.batch(chunk);
   }
 }
 
